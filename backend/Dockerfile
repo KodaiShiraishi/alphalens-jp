@@ -17,6 +17,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/backend/dist ./backend/dist
+COPY --from=build /app/backend/drizzle ./backend/drizzle
 COPY --from=build /app/backend/package.json ./backend/package.json
 WORKDIR /app/backend
 EXPOSE 4000

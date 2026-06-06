@@ -10,6 +10,7 @@ const envSchema = z.object({
   DATABASE_USER: z.string().optional(),
   DATABASE_PASSWORD: z.string().optional(),
   SESSION_SECRET: z.string().min(16).default("development-session-secret-change-me"),
+  RUN_MIGRATIONS_ON_START: z.enum(["true", "false"]).default("false"),
   COOKIE_SECURE: z
     .enum(["true", "false"])
     .default(process.env.NODE_ENV === "production" ? "true" : "false"),

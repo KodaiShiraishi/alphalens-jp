@@ -98,6 +98,7 @@ export class AlphaLensStack extends Stack {
       logging: LogDrivers.awsLogs({ streamPrefix: "alphalens-api" }),
       environment: {
         NODE_ENV: "production",
+        RUN_MIGRATIONS_ON_START: "true",
         COOKIE_SECURE: "true",
         MARKET_DATA_PROVIDER: "mock",
         AI_PROVIDER: "mock",

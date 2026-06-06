@@ -117,6 +117,8 @@ npm run dev:frontend
 
 `frontend/next.config.mjs` は開発時だけ `/api/*` を backend へ proxy します。本番ビルドは静的exportとしてS3 + CloudFrontへ配置する想定です。
 
+AWSのECSタスクでは `RUN_MIGRATIONS_ON_START=true` を設定し、コンテナ起動時に `backend/drizzle/` のmigrationをRDSへ適用します。ローカル開発では明示的に `npm run db:migrate` を実行します。
+
 <a id="api-summary"></a>
 ## 6. API設計サマリ
 

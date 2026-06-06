@@ -1,6 +1,11 @@
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { closeDb } from "./db/client.js";
+import { runMigrations } from "./db/migrate.js";
+
+if (env.RUN_MIGRATIONS_ON_START === "true") {
+  await runMigrations();
+}
 
 const app = await buildApp();
 
