@@ -16,6 +16,7 @@ import {
   AllowedMethods
 } from "aws-cdk-lib/aws-cloudfront";
 import { LoadBalancerV2Origin, S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
+import { Alarm, ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
 import {
   Cluster,
   ContainerImage,
@@ -187,6 +188,68 @@ export class AlphaLensStack extends Stack {
     service.targetGroup.configureHealthCheck({
       path: "/api/health",
       healthyHttpCodes: "200"
+    });
+    new Alarm(this, "AlbTarget5xxAlarm", {
+      alarmDescription: "AlphaLens API target 5xx responses exceeded the MVP threshold.",
+      metric: new Metric({
+        namespace: "AWS/ApplicationELB",
+        metricName: "HTTPCode_Target_5XX_Count",
+        dimensionsMap: {
+          LoadBalancer: service.loadBalancer.loadBalancerFullName,
+          TargetGroup: service.targetGroup.targetGroupFullName
+        },
+        statistic: "Sum",
+        period: Duration.minutes(5)
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: TreatMissingData.NOT_BREACHING
+    });
+    new Alarm(this, "AlbTargetResponseTimeAlarm", {
+      alarmDescription: "AlphaLens API target response time is above the MVP target.",
+      metric: new Metric({
+        namespace: "AWS/ApplicationELB",
+        metricName: "TargetResponseTime",
+        dimensionsMap: {
+          LoadBalancer: service.loadBalancer.loadBalancerFullName,
+          TargetGroup: service.targetGroup.targetGroupFullName
+        },
+        statistic: "Average",
+        period: Duration.minutes(5)
+      }),
+      threshold: 2,
+      evaluationPeriods: 2,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: TreatMissingData.NOT_BREACHING
+    });
+    new Alarm(this, "RdsCpuAlarm", {
+      alarmDescription: "AlphaLens RDS CPU utilization is high.",
+      metric: database.metricCPUUtilization({
+        statistic: "Average",
+        period: Duration.minutes(5)
+      }),
+      threshold: 80,
+      evaluationPeriods: 3,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: TreatMissingData.NOT_BREACHING
+    });
+    new Alarm(this, "EcsRunningTaskAlarm", {
+      alarmDescription: "AlphaLens ECS service has no running API task.",
+      metric: new Metric({
+        namespace: "AWS/ECS",
+        metricName: "RunningTaskCount",
+        dimensionsMap: {
+          ClusterName: cluster.clusterName,
+          ServiceName: service.service.serviceName
+        },
+        statistic: "Average",
+        period: Duration.minutes(5)
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: ComparisonOperator.LESS_THAN_THRESHOLD,
+      treatMissingData: TreatMissingData.BREACHING
     });
 
     const distribution = new Distribution(this, "Distribution", {

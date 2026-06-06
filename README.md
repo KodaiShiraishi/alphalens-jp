@@ -80,7 +80,7 @@ alphalens-jp/
 - AI: OpenAI Responses API、Structured Outputs、JSON Schema検証、Mock AI
 - Market data: `MarketDataProvider` 抽象化、Mock Provider、J-Quants Provider
 - Auth: HttpOnly session cookie、DB保存トークンハッシュ、Double Submit Cookie CSRF
-- Infra: AWS CDK v2、S3、CloudFront、ALB、ECS Fargate、RDS PostgreSQL、Secrets Manager、CloudWatch Logs
+- Infra: AWS CDK v2、S3、CloudFront、ALB、ECS Fargate、RDS PostgreSQL、Secrets Manager、CloudWatch Logs/Alarms
 
 MVPは外部APIキーなしでも `MARKET_DATA_PROVIDER=mock` と `AI_PROVIDER=mock` で主要導線を確認できます。J-QuantsとOpenAIを使う場合は、環境変数で provider を切り替えます。
 
@@ -192,7 +192,7 @@ npm run db:seed
 - AIレポートには免責文、根拠データ、データ制約が含まれる。
 - Watchlistと分析履歴はログインユーザー単位で保存される。
 
-AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logsを確認します。
+AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logs/Alarmsを確認します。
 
 CDKはデフォルトでは `MARKET_DATA_PROVIDER=mock`、`AI_PROVIDER=mock` でデプロイします。実APIを使う場合は、先にSecrets Managerへキーを保存し、contextでsecret名または完全ARNを渡します。
 
@@ -213,7 +213,7 @@ npm run synth -w infra -- \
 - バックエンド: Node.js / TypeScript API、Fastify、Drizzle ORM、外部API連携、認証、集計処理
 - DB: PostgreSQL、drizzle-kit migration、財務時系列データ、分析履歴、Watchlist
 - AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
-- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch、AWS CDK
+- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch Logs/Alarms、AWS CDK
 - 将来拡張: S3 artifact/RAG保存、SQS、EventBridge、Workerによる非同期処理
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 

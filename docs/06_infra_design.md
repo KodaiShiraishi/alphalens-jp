@@ -144,6 +144,8 @@ CloudWatch Logsに出力するログ:
 - RDS CPU使用率
 - ECS Task停止
 
+MVPのCDKでは、ALB target 5xx、ALB target response time、RDS CPU、ECS RunningTaskCountをCloudWatch Alarmとして作成します。AI生成失敗率と外部API 429回数はAPIログとDBの `provider_fetch_logs` で確認し、メトリクス化は将来拡張とします。
+
 <a id="cost"></a>
 ## 8. コスト管理
 
