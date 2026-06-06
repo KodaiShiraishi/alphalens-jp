@@ -74,6 +74,8 @@ export function setSessionCookie(reply: FastifyReply, token: string): void {
 
 export function clearSessionCookie(reply: FastifyReply): void {
   reply.clearCookie(sessionCookieName, {
+    secure: secureCookies,
+    sameSite: "lax",
     path: "/"
   });
 }
