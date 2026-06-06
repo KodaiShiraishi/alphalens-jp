@@ -10,13 +10,18 @@ import type {
 import type { MarketDataProvider, ProviderRequestOptions } from "./marketDataProvider.js";
 
 type JQuantsTokenResponse = {
+  refreshToken: string;
+};
+
+type JQuantsIdTokenResponse = {
   idToken: string;
-  refreshToken?: string;
 };
 
 export class JQuantsProvider implements MarketDataProvider {
   readonly name = "jquants" as const;
+  private refreshToken: string | null = null;
   private idToken: string | null = null;
+  private idTokenExpiresAt = 0;
 
   async normalizeCode(input: string): Promise<StockCode> {
     const normalized = input.trim().replace(/\D/g, "");
@@ -127,19 +132,32 @@ export class JQuantsProvider implements MarketDataProvider {
   }
 
   private async getToken(options?: ProviderRequestOptions): Promise<string> {
-    if (this.idToken) return this.idToken;
+    if (this.idToken && Date.now() < this.idTokenExpiresAt) return this.idToken;
     if (!env.JQUANTS_EMAIL || !env.JQUANTS_PASSWORD) {
       throw new Error("J-Quants credentials are not configured.");
     }
-    const response = await fetch("https://api.jquants.com/v1/token/auth_user", {
+    if (!this.refreshToken) {
+      const response = await fetch("https://api.jquants.com/v1/token/auth_user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mailaddress: env.JQUANTS_EMAIL, password: env.JQUANTS_PASSWORD }),
+        signal: options?.signal
+      });
+      if (!response.ok) throw new Error(`J-Quants auth_user failed: ${response.status}`);
+      const payload = (await response.json()) as JQuantsTokenResponse;
+      this.refreshToken = payload.refreshToken;
+    }
+
+    const url = new URL("https://api.jquants.com/v1/token/auth_refresh");
+    url.searchParams.set("refreshtoken", this.refreshToken);
+    const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mailaddress: env.JQUANTS_EMAIL, password: env.JQUANTS_PASSWORD }),
       signal: options?.signal
     });
-    if (!response.ok) throw new Error(`J-Quants auth failed: ${response.status}`);
-    const payload = (await response.json()) as JQuantsTokenResponse;
+    if (!response.ok) throw new Error(`J-Quants auth_refresh failed: ${response.status}`);
+    const payload = (await response.json()) as JQuantsIdTokenResponse;
     this.idToken = payload.idToken;
+    this.idTokenExpiresAt = Date.now() + 23 * 60 * 60 * 1000;
     return payload.idToken;
   }
 }

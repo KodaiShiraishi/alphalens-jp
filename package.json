@@ -12,6 +12,7 @@
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w backend && npm run build -w frontend && npm run build -w infra",
+    "synth": "npm run synth -w infra",
     "test": "npm run test -w backend && npm run test -w frontend",
     "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend && npm run typecheck -w infra",
     "lint": "npm run lint -w backend && npm run lint -w frontend && npm run lint -w infra",
@@ -20,5 +21,19 @@
   },
   "engines": {
     "node": ">=20.11.0"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
+    "drizzle-kit": {
+      "esbuild": "0.25.12"
+    },
+    "next": {
+      "postcss": "8.5.15"
+    },
+    "vite": {
+      "esbuild": "0.28.0"
+    }
   }
 }

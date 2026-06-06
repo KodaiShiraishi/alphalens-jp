@@ -14,7 +14,7 @@ import {
   CachePolicy,
   AllowedMethods
 } from "aws-cdk-lib/aws-cloudfront";
-import { LoadBalancerV2Origin, S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
+import { LoadBalancerV2Origin, S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import {
   Cluster,
   ContainerImage,
@@ -27,6 +27,7 @@ import { ApplicationLoadBalancedFargateService } from "aws-cdk-lib/aws-ecs-patte
 import { InstanceClass, InstanceSize, InstanceType, Port, SecurityGroup, SubnetType, Vpc } from "aws-cdk-lib/aws-ec2";
 import { Credentials, DatabaseInstance, DatabaseInstanceEngine, PostgresEngineVersion } from "aws-cdk-lib/aws-rds";
 import { Bucket, BlockPublicAccess, BucketEncryption } from "aws-cdk-lib/aws-s3";
+import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
@@ -120,6 +121,8 @@ export class AlphaLensStack extends Stack {
       securityGroups: [appSecurityGroup],
       taskSubnets: { subnetType: SubnetType.PUBLIC },
       desiredCount: 1,
+      circuitBreaker: { rollback: true },
+      minHealthyPercent: 100,
       listenerPort: 80,
       healthCheckGracePeriod: Duration.seconds(60)
     });
@@ -129,8 +132,9 @@ export class AlphaLensStack extends Stack {
     });
 
     const distribution = new Distribution(this, "Distribution", {
+      defaultRootObject: "index.html",
       defaultBehavior: {
-        origin: new S3Origin(frontendBucket),
+        origin: S3BucketOrigin.withOriginAccessControl(frontendBucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS
       },
       additionalBehaviors: {
@@ -143,6 +147,13 @@ export class AlphaLensStack extends Stack {
           cachePolicy: CachePolicy.CACHING_DISABLED
         }
       }
+    });
+
+    new BucketDeployment(this, "FrontendDeployment", {
+      sources: [Source.asset(path.join(repoRoot, "frontend", "out"))],
+      destinationBucket: frontendBucket,
+      distribution,
+      distributionPaths: ["/*"]
     });
 
     new CfnOutput(this, "FrontendBucketName", { value: frontendBucket.bucketName });

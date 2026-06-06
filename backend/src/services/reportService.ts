@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { db } from "../db/client.js";
-import { analysisReports } from "../db/schema.js";
+import { analysisReports, stocks } from "../db/schema.js";
 import type { MarketService } from "./marketService.js";
 import type { AnalysisReportBody } from "../types/domain.js";
 import { errors } from "../utils/errors.js";
@@ -31,7 +31,47 @@ const reportBodySchema = z.object({
   disclaimer: z.string().min(1)
 });
 
-const prohibitedPatterns = [/必ず上がる/, /目標株価/, /投資すべき/, /利益保証/];
+const analysisReportJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "summary",
+    "growth",
+    "profitability",
+    "stability",
+    "risks",
+    "checkpoints",
+    "evidence",
+    "dataLimitations",
+    "disclaimer"
+  ],
+  properties: {
+    summary: { type: "string" },
+    growth: { type: "string" },
+    profitability: { type: "string" },
+    stability: { type: "string" },
+    risks: { type: "array", items: { type: "string" } },
+    checkpoints: { type: "array", items: { type: "string" } },
+    evidence: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "period", "value", "source"],
+        properties: {
+          label: { type: "string" },
+          period: { type: "string" },
+          value: { anyOf: [{ type: "number" }, { type: "string" }] },
+          source: { type: "string" }
+        }
+      }
+    },
+    dataLimitations: { type: "array", items: { type: "string" } },
+    disclaimer: { type: "string" }
+  }
+} as const;
+
+const prohibitedPatterns = [/買い推奨/, /売り推奨/, /買うべき/, /売るべき/, /必ず上がる/, /目標株価/, /投資すべき/, /利益保証/];
 
 export class ReportService {
   constructor(private readonly marketService: MarketService) {}
@@ -73,7 +113,8 @@ export class ReportService {
       }
     }
 
-    const body = await this.createReportBody(sourceSnapshot);
+    const generated = await this.createReportBody(sourceSnapshot);
+    const body = generated.body;
     const safe = validateSafety(body);
     if (!safe.ok) throw errors.aiProvider();
 
@@ -91,7 +132,7 @@ export class ReportService {
         inputSchemaVersion,
         modelProvider: env.AI_PROVIDER === "openai" ? "openai" : "mock",
         modelName: env.AI_PROVIDER === "openai" ? env.OPENAI_MODEL : "mock-rule-based",
-        providerResponseId: null,
+        providerResponseId: generated.providerResponseId ?? null,
         safetyFlags: safe.flags.length ? safe.flags : null,
         disclaimer
       })
@@ -100,18 +141,30 @@ export class ReportService {
     return { report: serializeReport(saved) };
   }
 
-  async listReports(userId: string, code?: string, limit = 20): Promise<Array<{ id: string; stockCode: string; title: string; createdAt: string }>> {
+  async listReports(
+    userId: string,
+    code?: string,
+    limit = 20
+  ): Promise<Array<{ id: string; stockCode: string; stockName: string; title: string; createdAt: string }>> {
     const filters = [eq(analysisReports.userId, userId)];
     if (code) filters.push(eq(analysisReports.stockCode, code));
     const rows = await db
-      .select()
+      .select({
+        id: analysisReports.id,
+        stockCode: analysisReports.stockCode,
+        stockName: stocks.name,
+        title: analysisReports.title,
+        createdAt: analysisReports.createdAt
+      })
       .from(analysisReports)
+      .innerJoin(stocks, eq(stocks.code, analysisReports.stockCode))
       .where(and(...filters))
       .orderBy(desc(analysisReports.createdAt))
       .limit(limit);
     return rows.map((row) => ({
       id: row.id,
       stockCode: row.stockCode,
+      stockName: row.stockName,
       title: row.title,
       createdAt: row.createdAt.toISOString()
     }));
@@ -143,12 +196,12 @@ export class ReportService {
     return row ?? null;
   }
 
-  private async createReportBody(sourceSnapshot: unknown): Promise<AnalysisReportBody> {
+  private async createReportBody(sourceSnapshot: unknown): Promise<{ body: AnalysisReportBody; providerResponseId?: string }> {
     if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
-      const body = await callOpenAI(sourceSnapshot);
-      return reportBodySchema.parse(body);
+      const result = await callOpenAI(sourceSnapshot);
+      return { body: reportBodySchema.parse(result.body), providerResponseId: result.providerResponseId };
     }
-    return reportBodySchema.parse(createMockReport(sourceSnapshot as ReportSourceSnapshot));
+    return { body: reportBodySchema.parse(createMockReport(sourceSnapshot as ReportSourceSnapshot)) };
   }
 }
 
@@ -198,7 +251,7 @@ function createMockReport(source: ReportSourceSnapshot): AnalysisReportBody {
   };
 }
 
-async function callOpenAI(sourceSnapshot: unknown): Promise<AnalysisReportBody> {
+async function callOpenAI(sourceSnapshot: unknown): Promise<{ body: AnalysisReportBody; providerResponseId: string }> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
   const response = await client.responses.create({
@@ -226,11 +279,21 @@ async function callOpenAI(sourceSnapshot: unknown): Promise<AnalysisReportBody> 
           }
         })
       }
-    ]
-  } as never);
-  const text = (response as { output_text?: string }).output_text;
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "analysis_report",
+        description: "Japanese fundamental research memo without investment advice.",
+        strict: true,
+        schema: analysisReportJsonSchema
+      }
+    }
+  });
+  if (response.status && response.status !== "completed") throw errors.aiProvider();
+  const text = response.output_text;
   if (!text) throw errors.aiProvider();
-  return JSON.parse(text) as AnalysisReportBody;
+  return { body: JSON.parse(text) as AnalysisReportBody, providerResponseId: response.id };
 }
 
 function validateSafety(body: AnalysisReportBody): { ok: boolean; flags: string[] } {
@@ -245,7 +308,9 @@ function serializeReport(row: {
   title: string;
   summary: string;
   body: unknown;
+  sourceSnapshot: unknown;
   inputHash: string;
+  disclaimer: string;
   createdAt: Date;
 }) {
   return {
@@ -254,6 +319,8 @@ function serializeReport(row: {
     title: row.title,
     summary: row.summary,
     body: row.body as AnalysisReportBody,
+    sourceSnapshot: row.sourceSnapshot,
+    disclaimer: row.disclaimer,
     inputDataVersion: row.inputHash,
     createdAt: row.createdAt.toISOString()
   };

@@ -7,10 +7,12 @@ import {
   request,
   resetCsrf,
   type AnalysisReport,
+  type AnalysisReportSummary,
   type PricePoint,
   type StockDetail,
   type StockItem,
-  type User
+  type User,
+  type WatchlistItem
 } from "../lib/api";
 
 export default function Home() {
@@ -22,7 +24,8 @@ export default function Home() {
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [detail, setDetail] = useState<StockDetail | null>(null);
   const [prices, setPrices] = useState<PricePoint[]>([]);
-  const [watchlist, setWatchlist] = useState<Array<{ code: string; name: string; latestPrice: number | null }>>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [reports, setReports] = useState<AnalysisReportSummary[]>([]);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -36,7 +39,10 @@ export default function Home() {
       const me = await request<{ user: User | null }>("/api/auth/me");
       setUser(me.user);
       await search("7203");
-      if (me.user) await loadWatchlist();
+      if (me.user) {
+        await loadWatchlist();
+        await loadReports();
+      }
     } catch (error) {
       setStatus(messageOf(error));
     }
@@ -54,7 +60,7 @@ export default function Home() {
       resetCsrf();
       await ensureCsrf();
       setUser(data.user);
-      await loadWatchlist();
+      await Promise.all([loadWatchlist(), loadReports()]);
     } catch (error) {
       setStatus(messageOf(error));
     } finally {
@@ -69,6 +75,7 @@ export default function Home() {
       resetCsrf();
       setUser(null);
       setWatchlist([]);
+      setReports([]);
       setReport(null);
       await ensureCsrf();
     } catch (error) {
@@ -105,6 +112,7 @@ export default function Home() {
       setDetail(detailData);
       setPrices(priceData.items);
       setReport(null);
+      if (user) await loadReports(code);
     } catch (error) {
       setStatus(messageOf(error));
     } finally {
@@ -128,11 +136,41 @@ export default function Home() {
     }
   }
 
+  async function removeWatchlist(code: string) {
+    setBusy(true);
+    setStatus("");
+    try {
+      await mutate<{ ok: boolean }>(`/api/watchlist/${code}`, { method: "DELETE" });
+      await loadWatchlist();
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loadWatchlist() {
-    const data = await request<{ items: Array<{ code: string; name: string; latestPrice: number | null }> }>(
-      "/api/watchlist"
-    );
+    const data = await request<{ items: WatchlistItem[] }>("/api/watchlist");
     setWatchlist(data.items);
+  }
+
+  async function loadReports(code?: string) {
+    const path = code ? `/api/analysis-reports?code=${encodeURIComponent(code)}&limit=20` : "/api/analysis-reports?limit=20";
+    const data = await request<{ items: AnalysisReportSummary[] }>(path);
+    setReports(data.items);
+  }
+
+  async function openReport(id: string) {
+    setBusy(true);
+    setStatus("");
+    try {
+      const data = await request<{ report: AnalysisReport }>(`/api/analysis-reports/${id}`);
+      setReport(data.report);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function generateReport() {
@@ -148,6 +186,7 @@ export default function Home() {
         }
       );
       setReport(data.report);
+      await Promise.all([loadReports(detail.stock.code), loadWatchlist()]);
     } catch (error) {
       setStatus(messageOf(error));
     } finally {
@@ -260,10 +299,50 @@ export default function Home() {
                 <div className="empty">ログイン後に銘柄を保存できます。</div>
               ) : (
                 watchlist.map((item) => (
-                  <button className="result-row" key={item.code} onClick={() => selectStock(item.code)}>
-                    <span className="code">{item.code}</span>
-                    <span>{item.name}</span>
-                    <span>{yen(item.latestPrice)}</span>
+                  <div className="watchlist-item" key={item.code}>
+                    <button className="watchlist-main" onClick={() => selectStock(item.code)}>
+                      <span className="code">{item.code}</span>
+                      <span>
+                        <strong>{item.name}</strong>
+                        <br />
+                        <span className="muted">最終分析 {dateTime(item.lastAnalyzedAt)}</span>
+                      </span>
+                      <span>
+                        {yen(item.latestPrice)}
+                        <br />
+                        <span className={item.priceChange !== null && item.priceChange < 0 ? "negative" : "positive"}>
+                          {signedYen(item.priceChange)} / {signedPercent(item.priceChangePct)}
+                        </span>
+                      </span>
+                    </button>
+                    <button className="row-action danger" onClick={() => removeWatchlist(item.code)} disabled={busy}>
+                      削除
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">分析履歴</h2>
+            </div>
+            <div className="panel-body results">
+              {!user ? (
+                <div className="empty">ログイン後に分析履歴を確認できます。</div>
+              ) : reports.length === 0 ? (
+                <div className="empty">保存済みレポートはまだありません。</div>
+              ) : (
+                reports.map((item) => (
+                  <button className="result-row history-row" key={item.id} onClick={() => openReport(item.id)}>
+                    <span className="code">{item.stockCode}</span>
+                    <span>
+                      <strong>{item.stockName}</strong>
+                      <br />
+                      <span className="muted">{item.title}</span>
+                    </span>
+                    <span>{dateTime(item.createdAt)}</span>
                   </button>
                 ))
               )}
@@ -277,7 +356,9 @@ export default function Home() {
               <div>
                 <h1 className="panel-title">{detail ? detail.stock.name : "銘柄詳細"}</h1>
                 <div className="muted">
-                  {detail ? `${detail.stock.displayCode} / ${detail.stock.market ?? "-"} / ${detail.stock.sector33 ?? "-"}` : "検索結果から銘柄を選択"}
+                  {detail
+                    ? `${detail.stock.displayCode} / ${detail.stock.market ?? "-"} / ${detail.stock.sector33 ?? "-"} / ${sourceLabel(detail.stock.provider)} / 更新 ${dateTime(detail.dataUpdatedAt)}`
+                    : "検索結果から銘柄を選択"}
                 </div>
               </div>
               <button className="button" onClick={generateReport} disabled={!user || !detail || busy}>
@@ -317,8 +398,11 @@ export default function Home() {
                     <ReportList title="確認ポイント" items={report.body.checkpoints} />
                     <ReportList title="リスク" items={report.body.risks} />
                     <ReportList title="データ制約" items={report.body.dataLimitations} />
+                    <EvidenceList items={report.body.evidence} />
                   </div>
-                  <p className="muted">{report.body.disclaimer}</p>
+                  <p className="disclaimer">
+                    {report.body.disclaimer} 最終的な投資判断はご自身で行ってください。
+                  </p>
                 </div>
               )}
             </div>
@@ -382,9 +466,37 @@ function ReportList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+function EvidenceList({ items }: { items: AnalysisReport["body"]["evidence"] }) {
+  return (
+    <section className="report-section report-section-wide">
+      <h3>根拠データ</h3>
+      {items.length === 0 ? (
+        <p className="muted">根拠データなし</p>
+      ) : (
+        <div className="evidence-list">
+          {items.map((item) => (
+            <div className="evidence-row" key={`${item.label}-${item.period}-${item.source}`}>
+              <span>{item.label}</span>
+              <span>{item.period}</span>
+              <strong>{typeof item.value === "number" ? bigYen(item.value) : item.value}</strong>
+              <span className="muted">{item.source}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function yen(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   return `${Math.round(value).toLocaleString("ja-JP")}円`;
+}
+
+function signedYen(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${Math.round(value).toLocaleString("ja-JP")}円`;
 }
 
 function bigYen(value: number | null | undefined): string {
@@ -397,6 +509,28 @@ function bigYen(value: number | null | undefined): string {
 function percent(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function signedPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${(value * 100).toFixed(2)}%`;
+}
+
+function dateTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function sourceLabel(provider: StockItem["provider"]): string {
+  if (provider === "jquants") return "J-Quants";
+  if (provider === "mock") return "Mock";
+  return "データソース不明";
 }
 
 function messageOf(error: unknown): string {

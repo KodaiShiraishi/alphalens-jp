@@ -1,6 +1,6 @@
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { dailyPrices, financialStatements, providerFetchLogs, stocks } from "../db/schema.js";
+import { analysisReports, dailyPrices, financialStatements, providerFetchLogs, stocks } from "../db/schema.js";
 import type { DailyPrice, FinancialStatement, Stock, StockProfile } from "../types/domain.js";
 
 export async function upsertStock(stock: Stock | StockProfile): Promise<void> {
@@ -226,6 +226,25 @@ export async function latestDailyPrice(stockCode: string): Promise<DailyPrice | 
   };
 }
 
+export async function latestDailyPrices(stockCode: string, limit = 2): Promise<DailyPrice[]> {
+  const rows = await db
+    .select()
+    .from(dailyPrices)
+    .where(eq(dailyPrices.stockCode, stockCode))
+    .orderBy(desc(dailyPrices.date))
+    .limit(limit);
+  return rows.map((row) => ({
+    date: row.date,
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    close: row.close,
+    adjustedClose: row.adjustedClose,
+    volume: row.volume,
+    turnoverValue: row.turnoverValue
+  }));
+}
+
 export async function latestFinancialStatement(stockCode: string): Promise<FinancialStatement | null> {
   const [row] = await db
     .select()
@@ -252,6 +271,16 @@ export async function latestFinancialStatement(stockCode: string): Promise<Finan
     operatingCashFlow: row.operatingCashFlow,
     freeCashFlow: row.freeCashFlow
   };
+}
+
+export async function latestAnalysisReportCreatedAt(userId: string, stockCode: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ createdAt: analysisReports.createdAt })
+    .from(analysisReports)
+    .where(and(eq(analysisReports.userId, userId), eq(analysisReports.stockCode, stockCode)))
+    .orderBy(desc(analysisReports.createdAt))
+    .limit(1);
+  return row?.createdAt ?? null;
 }
 
 export async function logProviderFetch(input: {

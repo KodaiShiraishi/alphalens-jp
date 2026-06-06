@@ -5,7 +5,7 @@ import { z } from "zod";
 import { sessionCookieName } from "../config/env.js";
 import { db } from "../db/client.js";
 import { stocks, watchlistItems } from "../db/schema.js";
-import { latestDailyPrice } from "../repositories/marketRepository.js";
+import { latestAnalysisReportCreatedAt, latestDailyPrices } from "../repositories/marketRepository.js";
 import { requireUser } from "../services/authService.js";
 import type { MarketService } from "../services/marketService.js";
 import { errors } from "../utils/errors.js";
@@ -30,13 +30,26 @@ export function watchlistRoutes(marketService: MarketService): FastifyPluginAsyn
         .where(eq(watchlistItems.userId, user.id))
         .orderBy(desc(watchlistItems.createdAt));
       const items = await Promise.all(
-        rows.map(async (row) => ({
-          code: row.code,
-          name: row.name,
-          latestPrice: (await latestDailyPrice(row.code))?.close ?? null,
-          lastAnalyzedAt: null,
-          createdAt: row.createdAt.toISOString()
-        }))
+        rows.map(async (row) => {
+          const [latestPrice, previousPrice] = await latestDailyPrices(row.code, 2);
+          const latestClose = latestPrice?.close ?? null;
+          const previousClose = previousPrice?.close ?? null;
+          const priceChange =
+            latestClose !== null && previousClose !== null ? latestClose - previousClose : null;
+          const priceChangePct =
+            priceChange !== null && previousClose ? priceChange / previousClose : null;
+          const lastAnalyzedAt = await latestAnalysisReportCreatedAt(user.id, row.code);
+          return {
+            code: row.code,
+            name: row.name,
+            latestPrice: latestClose,
+            previousClose,
+            priceChange,
+            priceChangePct,
+            lastAnalyzedAt: lastAnalyzedAt?.toISOString() ?? null,
+            createdAt: row.createdAt.toISOString()
+          };
+        })
       );
       return { items };
     });

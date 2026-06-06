@@ -1,5 +1,5 @@
 import { daysAgoIso, todayIso } from "../utils/dates.js";
-import { errors } from "../utils/errors.js";
+import { AppError, errors } from "../utils/errors.js";
 import { stableHash } from "../utils/crypto.js";
 import type { MarketDataProvider } from "../providers/marketDataProvider.js";
 import type { DailyPrice, FinancialStatement, Stock } from "../types/domain.js";
@@ -20,7 +20,26 @@ export class MarketService {
   constructor(private readonly provider: MarketDataProvider) {}
 
   async search(input: { query?: string; market?: string; sector?: string; limit: number }): Promise<{ items: Stock[]; total: number }> {
-    const providerItems = await this.provider.searchStocks(input);
+    const requestHash = stableHash(input);
+    let providerItems: Stock[];
+    try {
+      providerItems = await this.provider.searchStocks(input);
+      await logProviderFetch({
+        provider: this.provider.name,
+        endpoint: "searchStocks",
+        status: "succeeded",
+        requestHash
+      });
+    } catch (error) {
+      await logProviderFetch({
+        provider: this.provider.name,
+        endpoint: "searchStocks",
+        status: "failed",
+        requestHash,
+        errorMessage: error instanceof Error ? error.message : "unknown error"
+      });
+      throw errors.marketProvider();
+    }
     for (const item of providerItems) {
       await upsertStock(item);
     }
@@ -101,12 +120,13 @@ export class MarketService {
       await logProviderFetch({
         provider: this.provider.name,
         endpoint: "ensureStockData",
-        stockCode: normalized.displayCode,
+        stockCode: null,
         status: "failed",
         requestHash: stableHash({ code }),
         errorMessage: error instanceof Error ? error.message : "unknown error"
       });
-      throw error;
+      if (error instanceof AppError) throw error;
+      throw errors.marketProvider();
     }
   }
 }

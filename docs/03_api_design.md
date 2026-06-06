@@ -333,6 +333,9 @@ Response:
       "code": "7203",
       "name": "トヨタ自動車",
       "latestPrice": 3021.5,
+      "previousClose": 3000.0,
+      "priceChange": 21.5,
+      "priceChangePct": 0.007166,
       "lastAnalyzedAt": "2026-06-06T12:00:00Z",
       "createdAt": "2026-06-06T10:00:00Z"
     }
@@ -537,6 +540,7 @@ Response:
 | 403 | CSRF_TOKEN_INVALID | CSRFトークンなし、または不一致 |
 | 404 | STOCK_NOT_FOUND | 銘柄なし |
 | 404 | REPORT_NOT_FOUND | レポートなし |
+| 409 | USER_ALREADY_EXISTS | 登録済みメールアドレス |
 | 409 | WATCHLIST_ALREADY_EXISTS | Watchlist登録済み |
 | 429 | RATE_LIMITED | レート制限 |
 | 502 | MARKET_DATA_PROVIDER_ERROR | 外部データ取得失敗 |

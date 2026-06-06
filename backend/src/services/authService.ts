@@ -17,7 +17,7 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 14;
 
 export async function registerUser(email: string, password: string): Promise<{ user: PublicUser; sessionToken: string }> {
   const existing = await findUserByEmail(email);
-  if (existing) throw errors.validation("このメールアドレスは登録済みです。");
+  if (existing) throw errors.userAlreadyExists();
   const userId = randomUUID();
   const passwordHash = await bcrypt.hash(password, 12);
   const [user] = await db

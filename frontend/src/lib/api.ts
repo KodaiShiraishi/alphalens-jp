@@ -12,6 +12,8 @@ export type StockItem = {
   market?: string | null;
   sector33?: string | null;
   lastPrice?: number | null;
+  provider?: "mock" | "jquants";
+  providerUpdatedAt?: string | null;
 };
 
 export type StockDetail = {
@@ -58,7 +60,28 @@ export type AnalysisReport = {
     dataLimitations: string[];
     disclaimer: string;
   };
+  sourceSnapshot?: unknown;
+  disclaimer: string;
   inputDataVersion: string;
+  createdAt: string;
+};
+
+export type AnalysisReportSummary = {
+  id: string;
+  stockCode: string;
+  stockName: string;
+  title: string;
+  createdAt: string;
+};
+
+export type WatchlistItem = {
+  code: string;
+  name: string;
+  latestPrice: number | null;
+  previousClose: number | null;
+  priceChange: number | null;
+  priceChangePct: number | null;
+  lastAnalyzedAt: string | null;
   createdAt: string;
 };
 

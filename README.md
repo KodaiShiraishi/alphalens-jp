@@ -1,19 +1,26 @@
 # AlphaLens JP 設計ドキュメント
 
+AlphaLens JPは、日本株の財務データ・株価データ・企業情報を統合し、AIがファンダメンタルズ調査メモを生成するSaaSです。
+
+目的は「投資助言」ではなく、企業調査に必要な情報収集・整理・比較を効率化することです。AIレポートには免責文と根拠データを表示し、売買推奨・目標株価・株価予測は扱いません。
+
 ## 目次
 - [1. プロジェクト概要](#overview)
 - [2. ドキュメント構成](#documents)
 - [3. MVPの結論](#mvp-summary)
-- [4. 採用向けアピール軸](#career-points)
-- [5. 実装時のCodex向け指示](#codex-instructions)
-- [6. 参照データソース](#sources)
+- [4. 実装構成](#implementation)
+- [5. ローカル起動](#local-dev)
+- [6. API設計サマリ](#api-summary)
+- [7. DB設計サマリ](#db-summary)
+- [8. テスト・検証](#verification)
+- [9. 採用向けアピール軸](#career-points)
+- [10. 実装時のCodex向け指示](#codex-instructions)
+- [11. 参照データソース](#sources)
 
 <a id="overview"></a>
 ## 1. プロジェクト概要
 
-AlphaLens JPは、日本株の財務データ・株価データ・企業情報を統合し、AIがファンダメンタルズ調査レポートを生成するSaaSです。
-
-目的は「投資助言」ではなく、企業調査に必要な情報収集・整理・比較を効率化することです。ユーザーは銘柄を検索し、財務指標・株価推移・AI分析レポート・Watchlistを通じて、調査メモを継続的に管理できます。
+ユーザーは銘柄を検索し、財務指標・株価推移・AI分析レポート・Watchlist・分析履歴を通じて、調査メモを継続的に管理できます。
 
 <a id="documents"></a>
 ## 2. ドキュメント構成
@@ -53,8 +60,135 @@ MVPでは次を作りません。
 - 高度なポートフォリオ管理
 - 有料課金機能
 
+<a id="implementation"></a>
+## 4. 実装構成
+
+```text
+alphalens-jp/
+  frontend/        Next.js static export UI
+  backend/         Fastify REST API, Drizzle ORM, market/AI service layer
+  infra/           AWS CDK v2 TypeScript
+  docs/            Requirements and design documents
+  docker-compose.yml
+```
+
+採用技術:
+
+- Frontend: Next.js、React、TypeScript
+- Backend: Node.js / TypeScript、Fastify、Drizzle ORM
+- Database: PostgreSQL、drizzle-kit migration
+- AI: OpenAI Responses API、Structured Outputs、JSON Schema検証、Mock AI
+- Market data: `MarketDataProvider` 抽象化、Mock Provider、J-Quants Provider
+- Auth: HttpOnly session cookie、DB保存トークンハッシュ、Double Submit Cookie CSRF
+- Infra: AWS CDK v2、S3、CloudFront、ALB、ECS Fargate、RDS PostgreSQL、Secrets Manager、CloudWatch Logs
+
+MVPは外部APIキーなしでも `MARKET_DATA_PROVIDER=mock` と `AI_PROVIDER=mock` で主要導線を確認できます。J-QuantsとOpenAIを使う場合は、環境変数で provider を切り替えます。
+
+```mermaid
+flowchart TB
+  User["Browser"] --> CF["CloudFront"]
+  CF --> FE["S3 Static Frontend"]
+  CF -->|"/api/*"| ALB["Application Load Balancer"]
+  ALB --> ECS["ECS Fargate: Fastify API"]
+  ECS --> RDS["RDS PostgreSQL"]
+  ECS --> JQ["J-Quants API"]
+  ECS --> OpenAI["OpenAI Responses API"]
+  Secrets["Secrets Manager"] --> ECS
+  ECS --> CW["CloudWatch Logs"]
+```
+
+MVPではコストを抑えるため、ECS TaskはPublic Subnet + Public IPで外部APIへ接続します。本来の商用運用ではPrivate Subnet + NAT Gatewayを採用します。
+
+<a id="local-dev"></a>
+## 5. ローカル起動
+
+```bash
+npm install
+docker compose up -d postgres
+npm run db:migrate
+npm run db:seed
+npm run dev:backend
+npm run dev:frontend
+```
+
+- Frontend: http://localhost:3000
+- Backend health: http://localhost:4000/api/health
+- PostgreSQL: `localhost:15432`
+
+`frontend/next.config.mjs` は開発時だけ `/api/*` を backend へ proxy します。本番ビルドは静的exportとしてS3 + CloudFrontへ配置する想定です。
+
+<a id="api-summary"></a>
+## 6. API設計サマリ
+
+主要API:
+
+- `GET /api/health`
+- `GET /api/auth/csrf`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/stocks`
+- `GET /api/stocks/:code`
+- `GET /api/stocks/:code/prices`
+- `GET /api/stocks/:code/financials`
+- `GET /api/watchlist`
+- `POST /api/watchlist`
+- `DELETE /api/watchlist/:code`
+- `POST /api/stocks/:code/analysis-reports`
+- `GET /api/analysis-reports`
+- `GET /api/analysis-reports/:id`
+
+状態変更APIはすべて `al_csrf` Cookie と `X-CSRF-Token` ヘッダーを照合します。セッションCookieは本番で `__Host-al_session`、ローカルHTTPで `al_session` を使います。
+
+<a id="db-summary"></a>
+## 7. DB設計サマリ
+
+```mermaid
+erDiagram
+  users ||--o{ sessions : has
+  users ||--o{ watchlist_items : owns
+  users ||--o{ analysis_reports : owns
+  stocks ||--o{ daily_prices : has
+  stocks ||--o{ financial_statements : has
+  stocks ||--o{ watchlist_items : watched
+  stocks ||--o{ analysis_reports : analyzed
+  stocks ||--o{ provider_fetch_logs : fetched
+```
+
+主な設計:
+
+- ユーザー固有データは `user_id` で分離する。
+- セッショントークンは生値をCookie、SHA-256ハッシュをDBに保存する。
+- `stocks.code` は表示用4桁コードを基本とし、外部API用に `provider_code` を分ける。
+- 外部APIの生レスポンスはMVPでは保存しない。正規化済みデータと取得ログだけ保存する。
+- AIレポートは `input_hash` を保存し、同一入力では既存レポートを再利用できる。
+
+<a id="verification"></a>
+## 8. テスト・検証
+
+ローカルで実行する主な検証:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run db:migrate
+npm run db:seed
+```
+
+確認済みのスモーク導線:
+
+- `GET /api/health` がDB接続込みで200を返す。
+- CSRF取得、登録、検索、銘柄詳細、Watchlist追加、AIレポート生成がMock Providerで一連動作する。
+- AIレポートには免責文、根拠データ、データ制約が含まれる。
+- Watchlistと分析履歴はログインユーザー単位で保存される。
+
+AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logsを確認します。
+
 <a id="career-points"></a>
-## 4. 採用向けアピール軸
+## 9. 採用向けアピール軸
 
 このプロジェクトで見せる技術要素は次です。
 
@@ -69,7 +203,7 @@ MVPでは次を作りません。
 面接では「株価を当てるアプリ」ではなく、「企業調査の情報収集と分析を効率化するデータSaaS」と説明します。
 
 <a id="codex-instructions"></a>
-## 5. 実装時のCodex向け指示
+## 10. 実装時のCodex向け指示
 
 Codexが実装に入るときは、次の順で読んでください。
 
@@ -88,7 +222,7 @@ Codexが実装に入るときは、次の順で読んでください。
 外部APIの仕様は変更される可能性があるため、実装前にJ-Quants APIの現行仕様を確認してください。J-Quants APIはV2移行が進んでいるため、V1前提で実装しないでください。
 
 <a id="sources"></a>
-## 6. 参照データソース
+## 11. 参照データソース
 
 - J-Quants API: https://www.jpx.co.jp/markets/other-data-services/j-quants-api/index.html
 - J-Quants API docs: https://jpx.gitbook.io/j-quants-ja/api-reference
