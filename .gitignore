@@ -1,28 +1,14 @@
-# Environment variables
-.env
-.env.*
-!.env.example
-
-# Node / Next.js
 node_modules/
+dist/
 .next/
 out/
-dist/
 coverage/
-
-# Go
-bin/
-*.test
-*.out
-
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-
-# OS / editor
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+!.env.example
+*.log
+cdk.out/
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
-

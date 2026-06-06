@@ -1,0 +1,70 @@
+import { and, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
+import { sessionCookieName } from "../config/env.js";
+import { db } from "../db/client.js";
+import { stocks, watchlistItems } from "../db/schema.js";
+import { latestDailyPrice } from "../repositories/marketRepository.js";
+import { requireUser } from "../services/authService.js";
+import type { MarketService } from "../services/marketService.js";
+import { errors } from "../utils/errors.js";
+
+const addSchema = z.object({
+  code: z.string().min(4).max(10),
+  note: z.string().max(1000).optional()
+});
+
+export function watchlistRoutes(marketService: MarketService): FastifyPluginAsync {
+  return async (app) => {
+    app.get("/watchlist", async (request) => {
+      const user = await requireUser(request.cookies[sessionCookieName]);
+      const rows = await db
+        .select({
+          code: stocks.code,
+          name: stocks.name,
+          createdAt: watchlistItems.createdAt
+        })
+        .from(watchlistItems)
+        .innerJoin(stocks, eq(stocks.code, watchlistItems.stockCode))
+        .where(eq(watchlistItems.userId, user.id))
+        .orderBy(desc(watchlistItems.createdAt));
+      const items = await Promise.all(
+        rows.map(async (row) => ({
+          code: row.code,
+          name: row.name,
+          latestPrice: (await latestDailyPrice(row.code))?.close ?? null,
+          lastAnalyzedAt: null,
+          createdAt: row.createdAt.toISOString()
+        }))
+      );
+      return { items };
+    });
+
+    app.post("/watchlist", async (request) => {
+      const user = await requireUser(request.cookies[sessionCookieName]);
+      const input = addSchema.parse(request.body);
+      await marketService.ensureStockData(input.code);
+      const detail = await marketService.getDetail(input.code);
+      try {
+        await db.insert(watchlistItems).values({
+          id: randomUUID(),
+          userId: user.id,
+          stockCode: detail.stock.code,
+          note: input.note ?? null
+        });
+      } catch {
+        throw errors.watchlistAlreadyExists();
+      }
+      return { ok: true };
+    });
+
+    app.delete<{ Params: { code: string } }>("/watchlist/:code", async (request) => {
+      const user = await requireUser(request.cookies[sessionCookieName]);
+      await db
+        .delete(watchlistItems)
+        .where(and(eq(watchlistItems.userId, user.id), eq(watchlistItems.stockCode, request.params.code)));
+      return { ok: true };
+    });
+  };
+}
