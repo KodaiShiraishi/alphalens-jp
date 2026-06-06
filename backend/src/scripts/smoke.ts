@@ -3,40 +3,51 @@ import type { AddressInfo } from "node:net";
 import type { FastifyInstance } from "fastify";
 import pg from "pg";
 
-process.env.NODE_ENV ??= "test";
-process.env.COOKIE_SECURE ??= "false";
-process.env.MARKET_DATA_PROVIDER ??= "mock";
-process.env.AI_PROVIDER ??= "mock";
-process.env.SESSION_SECRET ??= "smoke-session-secret-change-me";
-process.env.DATABASE_URL ??=
-  process.env.ALPHALENS_SMOKE_DATABASE_URL ?? "postgres://alphalens:alphalens@localhost:15432/alphalens_smoke";
-
 type CookieJar = Record<string, string>;
 
-const [{ buildApp }, { closeDb }, { runMigrations }] = await Promise.all([
-  import("../app.js"),
-  import("../db/client.js"),
-  import("../db/migrate.js")
-]);
+const remoteBaseUrl = argValue("--base-url") ?? process.env.ALPHALENS_SMOKE_BASE_URL ?? process.env.SMOKE_BASE_URL;
 
-let app: FastifyInstance | undefined;
-
-try {
-  await ensureDatabase(process.env.DATABASE_URL);
-  await runMigrations();
-  app = await buildApp();
-  await app.listen({ host: "127.0.0.1", port: 0 });
-  const address = app.server.address();
-  if (!address || typeof address === "string") throw new Error("Smoke server did not expose a TCP address.");
-  const baseUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
-  await runSmoke(baseUrl);
-  console.log("local smoke ok");
-} finally {
-  await app?.close();
-  await closeDb();
+if (process.argv.includes("--remote") || remoteBaseUrl) {
+  if (!remoteBaseUrl) throw new Error("Remote smoke requires --base-url, ALPHALENS_SMOKE_BASE_URL, or SMOKE_BASE_URL.");
+  await runSmoke(normalizeBaseUrl(remoteBaseUrl), "remote");
+  console.log(`remote smoke ok: ${normalizeBaseUrl(remoteBaseUrl)}`);
+} else {
+  await runLocalSmoke();
 }
 
-async function runSmoke(baseUrl: string): Promise<void> {
+async function runLocalSmoke(): Promise<void> {
+  process.env.NODE_ENV ??= "test";
+  process.env.COOKIE_SECURE ??= "false";
+  process.env.MARKET_DATA_PROVIDER ??= "mock";
+  process.env.AI_PROVIDER ??= "mock";
+  process.env.SESSION_SECRET ??= "smoke-session-secret-change-me";
+  process.env.DATABASE_URL ??=
+    process.env.ALPHALENS_SMOKE_DATABASE_URL ?? "postgres://alphalens:alphalens@localhost:15432/alphalens_smoke";
+
+  const [{ buildApp }, { closeDb }, { runMigrations }] = await Promise.all([
+    import("../app.js"),
+    import("../db/client.js"),
+    import("../db/migrate.js")
+  ]);
+
+  let app: FastifyInstance | undefined;
+  try {
+    await ensureDatabase(process.env.DATABASE_URL);
+    await runMigrations();
+    app = await buildApp();
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("Smoke server did not expose a TCP address.");
+    const baseUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
+    await runSmoke(baseUrl, "local");
+    console.log("local smoke ok");
+  } finally {
+    await app?.close();
+    await closeDb();
+  }
+}
+
+async function runSmoke(baseUrl: string, mode: "local" | "remote"): Promise<void> {
   const jar: CookieJar = {};
 
   const health = await get<{ status: string; db: string }>(baseUrl, "/api/health", jar);
@@ -46,9 +57,11 @@ async function runSmoke(baseUrl: string): Promise<void> {
   const csrf = await get<{ csrfToken: string }>(baseUrl, "/api/auth/csrf", jar);
   expectEqual(csrf.csrfToken, jar.al_csrf, "csrf token cookie");
 
-  const email = `smoke-${randomUUID()}@example.com`;
-  await post<{ user: { email: string } }>(baseUrl, "/api/auth/register", jar, { email, password: "password123" });
-  if (!jar.al_session) throw new Error("Register did not set the session cookie.");
+  const email = process.env.ALPHALENS_SMOKE_EMAIL ?? `smoke-${randomUUID()}@example.com`;
+  const password = process.env.ALPHALENS_SMOKE_PASSWORD ?? "password123";
+  const authPath = process.env.ALPHALENS_SMOKE_EMAIL ? "/api/auth/login" : "/api/auth/register";
+  await post<{ user: { email: string } }>(baseUrl, authPath, jar, { email, password });
+  if (!jar.al_session && !jar["__Host-al_session"]) throw new Error("Auth did not set the session cookie.");
 
   const search = await get<{ items: Array<{ code: string; providerCode: string }>; total: number }>(
     baseUrl,
@@ -65,7 +78,9 @@ async function runSmoke(baseUrl: string): Promise<void> {
     jar
   );
   expectEqual(detail.stock.code, "7203", "detail stock code");
-  expectEqual(detail.stock.provider, "mock", "detail data provider");
+  if (!["mock", "jquants"].includes(detail.stock.provider)) {
+    throw new Error(`detail data provider: expected mock or jquants, got ${detail.stock.provider}`);
+  }
   if (!detail.latestPrice) throw new Error("Stock detail did not include latestPrice.");
 
   await post<{ ok: boolean }>(baseUrl, "/api/watchlist", jar, { code: "72030" });
@@ -84,7 +99,7 @@ async function runSmoke(baseUrl: string): Promise<void> {
   if (!generated.report.body.disclaimer.includes("投資助言ではありません")) {
     throw new Error("Generated report did not include the investment-advice disclaimer.");
   }
-  if (!generated.report.body.dataLimitations.join(" ").includes("Mock Provider")) {
+  if (detail.stock.provider === "mock" && !generated.report.body.dataLimitations.join(" ").includes("Mock Provider")) {
     throw new Error("Generated report did not disclose the Mock Provider data limitation.");
   }
 
@@ -94,6 +109,13 @@ async function runSmoke(baseUrl: string): Promise<void> {
   await post<{ ok: boolean }>(baseUrl, "/api/auth/logout", jar, {});
   const protectedResponse = await raw(baseUrl, "/api/watchlist", jar);
   expectEqual(protectedResponse.status, 401, "protected API after logout");
+
+  if (mode === "remote") {
+    const rootResponse = await fetch(baseUrl);
+    if (!rootResponse.ok) {
+      throw new Error(`Remote frontend root failed: ${rootResponse.status}`);
+    }
+  }
 }
 
 async function get<T>(baseUrl: string, path: string, jar: CookieJar): Promise<T> {
@@ -174,4 +196,14 @@ async function ensureDatabase(connectionString: string): Promise<void> {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function argValue(name: string): string | undefined {
+  const prefix = `${name}=`;
+  const value = process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
+  return value && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
 }

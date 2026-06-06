@@ -200,7 +200,7 @@ CIではブラウザ依存を増やす前段階として、`npm run smoke:local`
 - AIレポート生成できる。
 - CloudWatch Logsにエラーが出ていない。
 
-ローカル/CIでは `npm run smoke:local` を実行し、CSRF取得、登録、銘柄検索、銘柄詳細、Watchlist追加、AIレポート生成、分析履歴、ログアウト後401を実HTTPで確認します。本番デプロイ後は同じ観点をCloudFront公開URLに対して確認します。
+ローカル/CIでは `npm run smoke:local` を実行し、CSRF取得、登録、銘柄検索、銘柄詳細、Watchlist追加、AIレポート生成、分析履歴、ログアウト後401を実HTTPで確認します。本番デプロイ後は `ALPHALENS_SMOKE_BASE_URL` にCloudFront公開URLを指定して `npm run smoke:remote` を実行し、同じ観点を確認します。
 
 <a id="test-data"></a>
 ## 10. テストデータ
