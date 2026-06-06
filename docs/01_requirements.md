@@ -159,7 +159,7 @@ J-Quants APIから取得する候補データは次です。
 - 財務情報
 - 決算発表予定日
 
-J-Quants APIはV2移行が進んでいるため、実装前に現行仕様を確認してください。MVPでは、APIクライアント層を `MarketDataProvider` として抽象化し、EDINETや他のAPIに差し替えられるようにします。
+J-Quants APIはV2移行が進んでいるため、実装前に現行仕様を確認してください。MVPでは、APIクライアント層を `MarketDataProvider` として抽象化し、V2/APIキー方式を既定にします。旧V1仕様は明示的な互換モードに留め、EDINETや他のAPIにも差し替えられるようにします。
 
 J-Quants連携で注意する点:
 

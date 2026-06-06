@@ -1,8 +1,10 @@
 import { daysAgoIso, todayIso } from "../utils/dates.js";
+import { env } from "../config/env.js";
 import { AppError, errors } from "../utils/errors.js";
 import { stableHash } from "../utils/crypto.js";
 import type { MarketDataProvider } from "../providers/marketDataProvider.js";
 import type { DailyPrice, FinancialStatement, Stock } from "../types/domain.js";
+import { withRetry } from "./retry.js";
 import {
   findStock,
   findStocks,
@@ -23,7 +25,7 @@ export class MarketService {
     const requestHash = stableHash(input);
     let providerItems: Stock[];
     try {
-      providerItems = await this.provider.searchStocks(input);
+      providerItems = await this.callProvider("searchStocks", null, requestHash, () => this.provider.searchStocks(input));
       await logProviderFetch({
         provider: this.provider.name,
         endpoint: "searchStocks",
@@ -97,22 +99,26 @@ export class MarketService {
     }
 
     try {
-      const profile = await this.provider.getStockProfile(code);
-      if (!profile) throw errors.stockNotFound();
-      await upsertStock(profile);
-      const to = new Date();
-      const from = new Date();
-      from.setUTCFullYear(to.getUTCFullYear() - 1);
-      const [prices, statements] = await Promise.all([
-        this.provider.getDailyPrices(profile.code, from, to),
-        this.provider.getFinancialStatements(profile.code)
-      ]);
-      await upsertDailyPrices(profile.code, prices);
-      await upsertFinancialStatements(profile.code, statements);
+      await this.callProvider("ensureStockData", null, stableHash({ code }), async () => {
+        const profile = await this.provider.getStockProfile(code);
+        if (!profile) throw errors.stockNotFound();
+        await upsertStock(profile);
+        const to = new Date();
+        const from = new Date();
+        from.setUTCFullYear(to.getUTCFullYear() - 1);
+        const [prices, statements] = await Promise.all([
+          this.provider.getDailyPrices(profile.code, from, to),
+          this.provider.getFinancialStatements(profile.code)
+        ]);
+        await upsertDailyPrices(profile.code, prices);
+        await upsertFinancialStatements(profile.code, statements);
+        return profile;
+      });
+      const normalizedAfterFetch = await this.provider.normalizeCode(code);
       await logProviderFetch({
         provider: this.provider.name,
         endpoint: "ensureStockData",
-        stockCode: profile.code,
+        stockCode: normalizedAfterFetch.displayCode,
         status: "succeeded",
         requestHash: stableHash({ code })
       });
@@ -128,5 +134,28 @@ export class MarketService {
       if (error instanceof AppError) throw error;
       throw errors.marketProvider();
     }
+  }
+
+  private async callProvider<T>(
+    endpoint: string,
+    stockCode: string | null,
+    requestHash: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    return withRetry(operation, {
+      maxRetries: env.MARKET_DATA_MAX_RETRIES,
+      delayMs: env.MARKET_DATA_RETRY_DELAY_MS,
+      shouldRetry: (error) => !(error instanceof AppError),
+      onRetry: async ({ attempt, nextAttempt, error }) => {
+        await logProviderFetch({
+          provider: this.provider.name,
+          endpoint,
+          stockCode,
+          status: "failed",
+          requestHash,
+          errorMessage: `attempt ${attempt} failed; retrying attempt ${nextAttempt}: ${error instanceof Error ? error.message : "unknown error"}`
+        });
+      }
+    });
   }
 }

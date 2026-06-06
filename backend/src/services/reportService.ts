@@ -1,6 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import { env } from "../config/env.js";
 import { db } from "../db/client.js";
 import { analysisReports, stocks } from "../db/schema.js";
@@ -8,70 +7,14 @@ import type { MarketService } from "./marketService.js";
 import type { AnalysisReportBody } from "../types/domain.js";
 import { errors } from "../utils/errors.js";
 import { stableHash } from "../utils/crypto.js";
+import {
+  analysisReportBodySchema,
+  analysisReportDisclaimer,
+  analysisReportJsonSchema,
+  validateReportSafety
+} from "./analysisReportPolicy.js";
 
 const inputSchemaVersion = "analysis-input-v1";
-const disclaimer = "このレポートは投資助言ではありません。";
-
-const reportBodySchema = z.object({
-  summary: z.string().min(1),
-  growth: z.string().min(1),
-  profitability: z.string().min(1),
-  stability: z.string().min(1),
-  risks: z.array(z.string()),
-  checkpoints: z.array(z.string()),
-  evidence: z.array(
-    z.object({
-      label: z.string(),
-      period: z.string(),
-      value: z.union([z.number(), z.string()]),
-      source: z.string()
-    })
-  ),
-  dataLimitations: z.array(z.string()),
-  disclaimer: z.string().min(1)
-});
-
-const analysisReportJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "summary",
-    "growth",
-    "profitability",
-    "stability",
-    "risks",
-    "checkpoints",
-    "evidence",
-    "dataLimitations",
-    "disclaimer"
-  ],
-  properties: {
-    summary: { type: "string" },
-    growth: { type: "string" },
-    profitability: { type: "string" },
-    stability: { type: "string" },
-    risks: { type: "array", items: { type: "string" } },
-    checkpoints: { type: "array", items: { type: "string" } },
-    evidence: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["label", "period", "value", "source"],
-        properties: {
-          label: { type: "string" },
-          period: { type: "string" },
-          value: { anyOf: [{ type: "number" }, { type: "string" }] },
-          source: { type: "string" }
-        }
-      }
-    },
-    dataLimitations: { type: "array", items: { type: "string" } },
-    disclaimer: { type: "string" }
-  }
-} as const;
-
-const prohibitedPatterns = [/買い推奨/, /売り推奨/, /買うべき/, /売るべき/, /必ず上がる/, /目標株価/, /投資すべき/, /利益保証/];
 
 export class ReportService {
   constructor(private readonly marketService: MarketService) {}
@@ -115,7 +58,7 @@ export class ReportService {
 
     const generated = await this.createReportBody(sourceSnapshot);
     const body = generated.body;
-    const safe = validateSafety(body);
+    const safe = validateReportSafety(body);
     if (!safe.ok) throw errors.aiProvider();
 
     const [saved] = await db
@@ -134,7 +77,7 @@ export class ReportService {
         modelName: env.AI_PROVIDER === "openai" ? env.OPENAI_MODEL : "mock-rule-based",
         providerResponseId: generated.providerResponseId ?? null,
         safetyFlags: safe.flags.length ? safe.flags : null,
-        disclaimer
+        disclaimer: analysisReportDisclaimer
       })
       .returning();
 
@@ -202,9 +145,9 @@ export class ReportService {
   private async createReportBody(sourceSnapshot: unknown): Promise<{ body: AnalysisReportBody; providerResponseId?: string }> {
     if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
       const result = await callOpenAI(sourceSnapshot);
-      return { body: reportBodySchema.parse(result.body), providerResponseId: result.providerResponseId };
+      return { body: analysisReportBodySchema.parse(result.body), providerResponseId: result.providerResponseId };
     }
-    return { body: reportBodySchema.parse(createMockReport(sourceSnapshot as ReportSourceSnapshot)) };
+    return { body: analysisReportBodySchema.parse(createMockReport(sourceSnapshot as ReportSourceSnapshot)) };
   }
 }
 
@@ -250,7 +193,7 @@ function createMockReport(source: ReportSourceSnapshot): AnalysisReportBody {
         ]
       : [],
     dataLimitations: source.source === "mock" ? ["このレポートはMock Providerのサンプルデータを使用しています。"] : [],
-    disclaimer
+    disclaimer: analysisReportDisclaimer
   };
 }
 
@@ -278,7 +221,7 @@ async function callOpenAI(sourceSnapshot: unknown): Promise<{ body: AnalysisRepo
             checkpoints: ["string"],
             evidence: [{ label: "string", period: "string", value: "number|string", source: "string" }],
             dataLimitations: ["string"],
-            disclaimer
+            disclaimer: analysisReportDisclaimer
           }
         })
       }
@@ -297,12 +240,6 @@ async function callOpenAI(sourceSnapshot: unknown): Promise<{ body: AnalysisRepo
   const text = response.output_text;
   if (!text) throw errors.aiProvider();
   return { body: JSON.parse(text) as AnalysisReportBody, providerResponseId: response.id };
-}
-
-function validateSafety(body: AnalysisReportBody): { ok: boolean; flags: string[] } {
-  const text = JSON.stringify(body);
-  const flags = prohibitedPatterns.filter((pattern) => pattern.test(text)).map((pattern) => pattern.source);
-  return { ok: flags.length === 0, flags };
 }
 
 function serializeReport(row: {

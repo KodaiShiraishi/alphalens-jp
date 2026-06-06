@@ -32,16 +32,19 @@ export class JQuantsProvider implements MarketDataProvider {
   }
 
   async searchStocks(query: StockSearchQuery, options?: ProviderRequestOptions): Promise<Stock[]> {
-    const token = await this.getToken(options);
-    const url = new URL("https://api.jquants.com/v1/listed/info");
+    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/equities/master" : "/listed/info");
+    const normalizedQuery = query.query?.trim().replace(/\D/g, "");
+    if (normalizedQuery && /^\d{4,5}$/.test(normalizedQuery)) {
+      url.searchParams.set("code", normalizedQuery);
+    }
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: await this.authHeaders(options),
       signal: options?.signal
     });
     if (!response.ok) throw new Error(`J-Quants listed info failed: ${response.status}`);
-    const payload = (await response.json()) as { info?: Array<Record<string, string>> };
+    const payload = (await response.json()) as Record<string, unknown>;
     const q = query.query?.trim().toLowerCase();
-    return (payload.info ?? [])
+    return getArrayPayload(payload, ["data", "info"])
       .map((item) => this.mapListedInfo(item))
       .filter((stock) => {
         if (!q) return true;
@@ -60,84 +63,98 @@ export class JQuantsProvider implements MarketDataProvider {
   }
 
   async getDailyPrices(code: string, from: Date, to: Date, options?: ProviderRequestOptions): Promise<DailyPrice[]> {
-    const token = await this.getToken(options);
     const normalized = await this.normalizeCode(code);
-    const url = new URL("https://api.jquants.com/v1/prices/daily_quotes");
+    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/equities/bars/daily" : "/prices/daily_quotes");
     url.searchParams.set("code", normalized.providerCode);
     url.searchParams.set("from", from.toISOString().slice(0, 10).replaceAll("-", ""));
     url.searchParams.set("to", to.toISOString().slice(0, 10).replaceAll("-", ""));
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: await this.authHeaders(options),
       signal: options?.signal
     });
     if (!response.ok) throw new Error(`J-Quants daily quotes failed: ${response.status}`);
-    const payload = (await response.json()) as { daily_quotes?: Array<Record<string, string | number | null>> };
-    return (payload.daily_quotes ?? []).map((item) => ({
-      date: String(item.Date),
-      open: toNumber(item.Open),
-      high: toNumber(item.High),
-      low: toNumber(item.Low),
-      close: toNumber(item.Close),
-      adjustedClose: toNumber(item.AdjustmentClose ?? item.Close),
-      volume: toNumber(item.Volume),
-      turnoverValue: toNumber(item.TurnoverValue)
+    const payload = (await response.json()) as Record<string, unknown>;
+    return getArrayPayload(payload, ["data", "daily_quotes"]).map((item) => ({
+      date: toStringValue(firstValue(item, ["Date", "D", "date"])),
+      open: toNumber(firstValue(item, ["Open", "O", "open"])),
+      high: toNumber(firstValue(item, ["High", "H", "high"])),
+      low: toNumber(firstValue(item, ["Low", "L", "low"])),
+      close: toNumber(firstValue(item, ["Close", "C", "close"])),
+      adjustedClose: toNumber(firstValue(item, ["AdjustmentClose", "AdjClose", "AC", "Close", "C"])),
+      volume: toNumber(firstValue(item, ["Volume", "Vo", "volume"])),
+      turnoverValue: toNumber(firstValue(item, ["TurnoverValue", "Va", "turnoverValue"]))
     }));
   }
 
   async getFinancialStatements(code: string, options?: ProviderRequestOptions): Promise<FinancialStatement[]> {
-    const token = await this.getToken(options);
     const normalized = await this.normalizeCode(code);
-    const url = new URL("https://api.jquants.com/v1/fins/statements");
+    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/fins/summary" : "/fins/statements");
     url.searchParams.set("code", normalized.providerCode);
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: await this.authHeaders(options),
       signal: options?.signal
     });
     if (!response.ok) throw new Error(`J-Quants statements failed: ${response.status}`);
-    const payload = (await response.json()) as { statements?: Array<Record<string, string | number | null>> };
-    return (payload.statements ?? []).map((item) => ({
-      periodType: "FY",
-      periodEnd: String(item.CurrentPeriodEndDate ?? item.CurrentFiscalYearEndDate),
-      disclosedAt: item.DisclosedDate ? String(item.DisclosedDate) : null,
-      netSales: toNumber(item.NetSales),
-      operatingProfit: toNumber(item.OperatingProfit),
-      ordinaryProfit: toNumber(item.OrdinaryProfit),
-      profit: toNumber(item.Profit),
-      eps: toNumber(item.EarningsPerShare),
-      bps: toNumber(item.BookValuePerShare),
-      equityRatio: toNumber(item.EquityToAssetRatio),
-      roe: null,
-      totalAssets: toNumber(item.TotalAssets),
-      equity: toNumber(item.Equity),
+    const payload = (await response.json()) as Record<string, unknown>;
+    return getArrayPayload(payload, ["data", "statements"]).map((item) => ({
+      periodType: toPeriodType(firstValue(item, ["TypeOfCurrentPeriod", "PeriodType", "periodType"])),
+      periodEnd: toStringValue(firstValue(item, ["CurrentPeriodEndDate", "CurrentFiscalYearEndDate", "PeriodEnd", "FiscalYearEnd", "DisclosedDate"])),
+      disclosedAt: toOptionalString(firstValue(item, ["DisclosedDate", "DisclosureDate"])),
+      netSales: toNumber(firstValue(item, ["NetSales", "NS", "Sales"])),
+      operatingProfit: toNumber(firstValue(item, ["OperatingProfit", "OP"])),
+      ordinaryProfit: toNumber(firstValue(item, ["OrdinaryProfit", "ORP"])),
+      profit: toNumber(firstValue(item, ["Profit", "NP", "NetIncome"])),
+      eps: toNumber(firstValue(item, ["EarningsPerShare", "EPS"])),
+      bps: toNumber(firstValue(item, ["BookValuePerShare", "BPS"])),
+      equityRatio: toNumber(firstValue(item, ["EquityToAssetRatio", "EquityRatio", "EQR"])),
+      roe: toNumber(firstValue(item, ["ROE", "Roe"])),
+      totalAssets: toNumber(firstValue(item, ["TotalAssets", "TA"])),
+      equity: toNumber(firstValue(item, ["Equity", "EQ"])),
       operatingCashFlow: null,
       freeCashFlow: null
     }));
   }
 
-  private mapListedInfo(item: Record<string, string>): Stock {
-    const code = String(item.Code ?? "");
+  private mapListedInfo(item: Record<string, unknown>): Stock {
+    const code = toStringValue(firstValue(item, ["Code", "LocalCode", "code"]));
+    const displayCode = code.slice(0, 4);
     return {
-      code: code.slice(0, 4),
-      displayCode: code.slice(0, 4),
+      code: displayCode,
+      displayCode,
       providerCode: code,
-      name: String(item.CompanyName ?? item.CompanyNameJapanese ?? code),
-      nameEn: item.CompanyNameEnglish ?? null,
-      market: item.MarketCodeName ?? null,
-      sector17: item.Sector17CodeName ?? null,
-      sector33: item.Sector33CodeName ?? null,
+      name: toStringValue(firstValue(item, ["CompanyName", "CompanyNameJapanese", "CoName", "Name"])) || code,
+      nameEn: toOptionalString(firstValue(item, ["CompanyNameEnglish", "CoNameEn", "NameEn"])),
+      market: toOptionalString(firstValue(item, ["MarketCodeName", "MarketName", "MktName", "Mkt"])),
+      sector17: toOptionalString(firstValue(item, ["Sector17CodeName", "Sector17Name", "S17Name", "S17"])),
+      sector33: toOptionalString(firstValue(item, ["Sector33CodeName", "Sector33Name", "S33Name", "S33"])),
       lastPrice: null,
       provider: "jquants",
       providerUpdatedAt: new Date()
     };
   }
 
-  private async getToken(options?: ProviderRequestOptions): Promise<string> {
+  private apiUrl(path: string): URL {
+    const base = env.JQUANTS_API_BASE_URL.endsWith("/") ? env.JQUANTS_API_BASE_URL : `${env.JQUANTS_API_BASE_URL}/`;
+    return new URL(path.replace(/^\//, ""), base);
+  }
+
+  private async authHeaders(options?: ProviderRequestOptions): Promise<Record<string, string>> {
+    if (env.JQUANTS_API_VERSION === "v2") {
+      if (!env.JQUANTS_API_KEY) {
+        throw new Error("J-Quants API key is not configured.");
+      }
+      return { "x-api-key": env.JQUANTS_API_KEY };
+    }
+    return { Authorization: `Bearer ${await this.getV1Token(options)}` };
+  }
+
+  private async getV1Token(options?: ProviderRequestOptions): Promise<string> {
     if (this.idToken && Date.now() < this.idTokenExpiresAt) return this.idToken;
     if (!env.JQUANTS_EMAIL || !env.JQUANTS_PASSWORD) {
       throw new Error("J-Quants credentials are not configured.");
     }
     if (!this.refreshToken) {
-      const response = await fetch("https://api.jquants.com/v1/token/auth_user", {
+      const response = await fetch(this.apiUrl("/token/auth_user"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mailaddress: env.JQUANTS_EMAIL, password: env.JQUANTS_PASSWORD }),
@@ -148,7 +165,7 @@ export class JQuantsProvider implements MarketDataProvider {
       this.refreshToken = payload.refreshToken;
     }
 
-    const url = new URL("https://api.jquants.com/v1/token/auth_refresh");
+    const url = this.apiUrl("/token/auth_refresh");
     url.searchParams.set("refreshtoken", this.refreshToken);
     const response = await fetch(url, {
       method: "POST",
@@ -162,8 +179,46 @@ export class JQuantsProvider implements MarketDataProvider {
   }
 }
 
-function toNumber(value: string | number | null | undefined): number | null {
+function getArrayPayload(payload: Record<string, unknown>, keys: string[]): Array<Record<string, unknown>> {
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value.filter(isRecord);
+  }
+  return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function firstValue(item: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (item[key] !== undefined) return item[key];
+  }
+  return undefined;
+}
+
+function toStringValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function toOptionalString(value: unknown): string | null {
+  const text = toStringValue(value);
+  return text ? text : null;
+}
+
+function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toPeriodType(value: unknown): FinancialStatement["periodType"] {
+  const text = toStringValue(value).toUpperCase();
+  if (text.includes("Q1") || text.includes("1Q")) return "Q1";
+  if (text.includes("Q2") || text.includes("2Q")) return "Q2";
+  if (text.includes("Q3") || text.includes("3Q")) return "Q3";
+  if (text.includes("Q4") || text.includes("4Q")) return "Q4";
+  return "FY";
 }

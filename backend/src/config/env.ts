@@ -15,6 +15,11 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default(process.env.NODE_ENV === "production" ? "true" : "false"),
   MARKET_DATA_PROVIDER: z.enum(["mock", "jquants"]).default("mock"),
+  MARKET_DATA_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  MARKET_DATA_RETRY_DELAY_MS: z.coerce.number().int().min(0).max(10_000).default(250),
+  JQUANTS_API_VERSION: z.enum(["v2", "v1"]).default("v2"),
+  JQUANTS_API_BASE_URL: z.string().url().optional(),
+  JQUANTS_API_KEY: z.string().optional(),
   JQUANTS_EMAIL: z.string().optional(),
   JQUANTS_PASSWORD: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
@@ -46,7 +51,10 @@ function buildDatabaseUrl(): string {
 
 export const env = {
   ...parsedEnv,
-  DATABASE_URL: buildDatabaseUrl()
+  DATABASE_URL: buildDatabaseUrl(),
+  JQUANTS_API_BASE_URL:
+    parsedEnv.JQUANTS_API_BASE_URL ??
+    (parsedEnv.JQUANTS_API_VERSION === "v2" ? "https://api.jquants.com/v2" : "https://api.jquants.com/v1")
 };
 export const isProduction = env.NODE_ENV === "production";
 export const secureCookies = env.COOKIE_SECURE === "true";

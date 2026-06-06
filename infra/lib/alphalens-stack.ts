@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import {
   CfnOutput,
   Duration,
+  IgnoreMode,
   RemovalPolicy,
   Stack,
   type StackProps
@@ -94,13 +95,34 @@ export class AlphaLensStack extends Stack {
       }
     });
     const container = task.addContainer("Api", {
-      image: ContainerImage.fromAsset(path.join(repoRoot, "backend")),
+      image: ContainerImage.fromAsset(repoRoot, {
+        file: path.join("backend", "Dockerfile"),
+        ignoreMode: IgnoreMode.GLOB,
+        exclude: [
+          "node_modules/**",
+          "**/node_modules/**",
+          "backend/dist/**",
+          "frontend/.next/**",
+          "frontend/out/**",
+          "infra/dist/**",
+          "cdk.out/**",
+          ".git/**",
+          ".env",
+          ".env.*",
+          "*.log",
+          "**/*.tsbuildinfo"
+        ]
+      }),
       logging: LogDrivers.awsLogs({ streamPrefix: "alphalens-api" }),
       environment: {
         NODE_ENV: "production",
         RUN_MIGRATIONS_ON_START: "true",
         COOKIE_SECURE: "true",
         MARKET_DATA_PROVIDER: "mock",
+        MARKET_DATA_MAX_RETRIES: "2",
+        MARKET_DATA_RETRY_DELAY_MS: "250",
+        JQUANTS_API_VERSION: "v2",
+        JQUANTS_API_BASE_URL: "https://api.jquants.com/v2",
         AI_PROVIDER: "mock",
         DATABASE_HOST: database.dbInstanceEndpointAddress,
         DATABASE_PORT: database.dbInstanceEndpointPort,

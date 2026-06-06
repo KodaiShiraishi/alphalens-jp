@@ -84,6 +84,8 @@ alphalens-jp/
 
 MVPは外部APIキーなしでも `MARKET_DATA_PROVIDER=mock` と `AI_PROVIDER=mock` で主要導線を確認できます。J-QuantsとOpenAIを使う場合は、環境変数で provider を切り替えます。
 
+J-Quants ProviderはV2/APIキー方式を既定にしています。実データを使う場合は `MARKET_DATA_PROVIDER=jquants`、`JQUANTS_API_VERSION=v2`、`JQUANTS_API_KEY` を設定します。旧V1互換が必要な場合だけ `JQUANTS_API_VERSION=v1` と `JQUANTS_EMAIL` / `JQUANTS_PASSWORD` を使います。
+
 ```mermaid
 flowchart TB
   User["Browser"] --> CF["CloudFront"]
@@ -224,7 +226,7 @@ Codexが実装に入るときは、次の順で読んでください。
 
 実装判断で迷った場合は、MVP範囲を優先してください。投資助言、株価予測、自動売買につながる機能はMVPに入れません。
 
-外部APIの仕様は変更される可能性があるため、実装前にJ-Quants APIの現行仕様を確認してください。J-Quants APIはV2移行が進んでいるため、V1前提で実装しないでください。
+外部APIの仕様は変更される可能性があるため、実装前にJ-Quants APIの現行仕様を確認してください。J-Quants APIはV2移行が進んでいるため、実装はV2/APIキー方式を既定にし、V1は明示的な互換モードとして扱います。
 
 <a id="sources"></a>
 ## 11. 参照データソース
