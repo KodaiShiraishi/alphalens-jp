@@ -92,6 +92,7 @@ MVP採用構成:
 
 - Next.jsは静的exportできるSPA寄りの構成にし、S3 + CloudFrontで配信する。
 - CloudFrontで `/api/*` をALBへルーティングし、フロントエンドとAPIを同一ドメインにする。
+- `/api/*` のCloudFront behaviorはCookie、クエリ文字列、`X-CSRF-Token` を含むviewerリクエストをALBへ転送する。`Host` ヘッダーだけはALB origin向けにCloudFront側で扱い、セッションCookieとDouble Submit CSRFを本番でも成立させる。
 - MVPではVercelやAmplify Hostingは採用しない。別site構成にするとCookie、CORS、CSRF設計が増えるためです。
 - デプロイ後はCloudFront URLを `ALPHALENS_SMOKE_BASE_URL` に設定し、`npm run smoke:remote` でhealth、認証、銘柄検索、Watchlist、AIレポート生成、分析履歴、ログアウト後401を確認する。
 

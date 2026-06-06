@@ -12,7 +12,7 @@
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w backend && npm run build -w frontend && npm run build -w infra",
-    "synth": "npm run synth -w infra",
+    "synth": "npm run build -w frontend && npm run synth -w infra",
     "test": "npm run test -w backend && npm run test -w frontend",
     "smoke:local": "npm run smoke -w backend",
     "smoke:remote": "npm run smoke:remote -w backend",
@@ -20,8 +20,8 @@
     "lint": "npm run lint -w backend && npm run lint -w frontend && npm run lint -w infra",
     "db:migrate": "npm run db:migrate -w backend",
     "db:seed": "npm run db:seed -w backend",
-    "cdk:diff": "npm run diff -w infra",
-    "cdk:deploy": "npm run deploy -w infra"
+    "cdk:diff": "npm run build -w frontend && npm run diff -w infra",
+    "cdk:deploy": "npm run build -w frontend && npm run deploy -w infra"
   },
   "engines": {
     "node": ">=20.11.0"

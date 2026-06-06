@@ -13,7 +13,8 @@ import {
   OriginProtocolPolicy,
   ViewerProtocolPolicy,
   CachePolicy,
-  AllowedMethods
+  AllowedMethods,
+  OriginRequestPolicy
 } from "aws-cdk-lib/aws-cloudfront";
 import { LoadBalancerV2Origin, S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { Alarm, ComparisonOperator, Metric, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
@@ -271,7 +272,8 @@ export class AlphaLensStack extends Stack {
           }),
           viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           allowedMethods: AllowedMethods.ALLOW_ALL,
-          cachePolicy: CachePolicy.CACHING_DISABLED
+          cachePolicy: CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
         }
       }
     });

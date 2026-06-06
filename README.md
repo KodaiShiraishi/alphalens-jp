@@ -207,6 +207,13 @@ npm run db:seed
 | `npm run build` | pass |
 | `npm run smoke:local` | pass |
 | `npm run synth` | pass |
+| `docker build -f backend/Dockerfile -t alphalens-backend-check .` | pass |
+| `docker run` image health check | pass: `GET /api/health` returns `{"status":"ok","db":"ok","version":"0.1.0"}` |
+
+Dependency audit note:
+
+- `npm audit --omit=dev` currently reports 2 moderate advisories from Next.js 16.2.7's pinned PostCSS 8.4.31 dependency. The suggested `npm audit fix --force` would downgrade Next.js to 9.3.3, so it is not applied.
+- Full `npm audit` also reports dev-only esbuild advisories through `drizzle-kit` -> `@esbuild-kit/*`. These affect local tooling, not the production Docker runtime; the production Docker install reported 0 vulnerabilities. Monitor upstream releases and update when a non-breaking fix is available.
 
 AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logs/Alarmsを確認します。
 
@@ -220,6 +227,8 @@ npm run cdk:deploy
 $env:ALPHALENS_SMOKE_BASE_URL="https://xxxxxxxx.cloudfront.net"
 npm run smoke:remote
 ```
+
+`npm run synth`、`npm run cdk:diff`、`npm run cdk:deploy` は、S3へ配置する `frontend/out` が古くならないように、実行前にフロントエンドの静的ビルドを更新します。
 
 実APIを有効にしたテンプレートを確認する例:
 
