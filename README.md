@@ -194,6 +194,16 @@ npm run db:seed
 
 AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logsを確認します。
 
+CDKはデフォルトでは `MARKET_DATA_PROVIDER=mock`、`AI_PROVIDER=mock` でデプロイします。実APIを使う場合は、先にSecrets Managerへキーを保存し、contextでsecret名または完全ARNを渡します。
+
+```bash
+npm run synth -w infra -- \
+  -c marketDataProvider=jquants \
+  -c jquantsApiKeySecretName=alphalens/jquants-api-key \
+  -c aiProvider=openai \
+  -c openAiApiKeySecretName=alphalens/openai-api-key
+```
+
 <a id="career-points"></a>
 ## 9. 採用向けアピール軸
 

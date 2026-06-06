@@ -29,11 +29,14 @@ import { InstanceClass, InstanceSize, InstanceType, Port, SecurityGroup, SubnetT
 import { Credentials, DatabaseInstance, DatabaseInstanceEngine, PostgresEngineVersion } from "aws-cdk-lib/aws-rds";
 import { Bucket, BlockPublicAccess, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
-import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { Secret, type ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(dirname, "..", "..");
+const allowedMarketDataProviders = ["mock", "jquants"] as const;
+const allowedAiProviders = ["mock", "openai"] as const;
+const allowedJQuantsApiVersions = ["v2", "v1"] as const;
 
 export class AlphaLensStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -94,6 +97,55 @@ export class AlphaLensStack extends Stack {
         excludePunctuation: true
       }
     });
+    const marketDataProvider = enumContext(this, "marketDataProvider", allowedMarketDataProviders, "mock");
+    const aiProvider = enumContext(this, "aiProvider", allowedAiProviders, "mock");
+    const jquantsApiVersion = enumContext(this, "jquantsApiVersion", allowedJQuantsApiVersions, "v2");
+    const jquantsApiBaseUrl =
+      contextString(this, "jquantsApiBaseUrl") ??
+      (jquantsApiVersion === "v2" ? "https://api.jquants.com/v2" : "https://api.jquants.com/v1");
+    const openAiModel = contextString(this, "openAiModel") ?? "gpt-4.1-mini";
+    const containerEnvironment: Record<string, string> = {
+      NODE_ENV: "production",
+      RUN_MIGRATIONS_ON_START: "true",
+      COOKIE_SECURE: "true",
+      MARKET_DATA_PROVIDER: marketDataProvider,
+      MARKET_DATA_MAX_RETRIES: "2",
+      MARKET_DATA_RETRY_DELAY_MS: "250",
+      JQUANTS_API_VERSION: jquantsApiVersion,
+      JQUANTS_API_BASE_URL: jquantsApiBaseUrl,
+      AI_PROVIDER: aiProvider,
+      OPENAI_MODEL: openAiModel,
+      DATABASE_HOST: database.dbInstanceEndpointAddress,
+      DATABASE_PORT: database.dbInstanceEndpointPort,
+      DATABASE_NAME: "alphalens",
+      DATABASE_USER: "alphalens"
+    };
+    const containerSecrets: Record<string, EcsSecret> = {
+      SESSION_SECRET: EcsSecret.fromSecretsManager(sessionSecret),
+      DATABASE_PASSWORD: EcsSecret.fromSecretsManager(dbSecret, "password")
+    };
+
+    if (marketDataProvider === "jquants") {
+      if (jquantsApiVersion === "v2") {
+        containerSecrets.JQUANTS_API_KEY = EcsSecret.fromSecretsManager(
+          importedSecret(this, "JQuantsApiKeySecret", "jquantsApiKeySecretArn", "jquantsApiKeySecretName")
+        );
+      } else {
+        containerSecrets.JQUANTS_EMAIL = EcsSecret.fromSecretsManager(
+          importedSecret(this, "JQuantsEmailSecret", "jquantsEmailSecretArn", "jquantsEmailSecretName")
+        );
+        containerSecrets.JQUANTS_PASSWORD = EcsSecret.fromSecretsManager(
+          importedSecret(this, "JQuantsPasswordSecret", "jquantsPasswordSecretArn", "jquantsPasswordSecretName")
+        );
+      }
+    }
+
+    if (aiProvider === "openai") {
+      containerSecrets.OPENAI_API_KEY = EcsSecret.fromSecretsManager(
+        importedSecret(this, "OpenAiApiKeySecret", "openAiApiKeySecretArn", "openAiApiKeySecretName")
+      );
+    }
+
     const container = task.addContainer("Api", {
       image: ContainerImage.fromAsset(repoRoot, {
         file: path.join("backend", "Dockerfile"),
@@ -114,25 +166,8 @@ export class AlphaLensStack extends Stack {
         ]
       }),
       logging: LogDrivers.awsLogs({ streamPrefix: "alphalens-api" }),
-      environment: {
-        NODE_ENV: "production",
-        RUN_MIGRATIONS_ON_START: "true",
-        COOKIE_SECURE: "true",
-        MARKET_DATA_PROVIDER: "mock",
-        MARKET_DATA_MAX_RETRIES: "2",
-        MARKET_DATA_RETRY_DELAY_MS: "250",
-        JQUANTS_API_VERSION: "v2",
-        JQUANTS_API_BASE_URL: "https://api.jquants.com/v2",
-        AI_PROVIDER: "mock",
-        DATABASE_HOST: database.dbInstanceEndpointAddress,
-        DATABASE_PORT: database.dbInstanceEndpointPort,
-        DATABASE_NAME: "alphalens",
-        DATABASE_USER: "alphalens"
-      },
-      secrets: {
-        SESSION_SECRET: EcsSecret.fromSecretsManager(sessionSecret),
-        DATABASE_PASSWORD: EcsSecret.fromSecretsManager(dbSecret, "password")
-      }
+      environment: containerEnvironment,
+      secrets: containerSecrets
     });
     container.addPortMappings({ containerPort: 4000, protocol: Protocol.TCP });
 
@@ -182,4 +217,28 @@ export class AlphaLensStack extends Stack {
     new CfnOutput(this, "FrontendBucketName", { value: frontendBucket.bucketName });
     new CfnOutput(this, "DistributionDomainName", { value: distribution.distributionDomainName });
   }
+}
+
+function contextString(scope: Construct, key: string): string | undefined {
+  const value = scope.node.tryGetContext(key);
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function enumContext<const T extends readonly string[]>(
+  scope: Construct,
+  key: string,
+  allowed: T,
+  defaultValue: T[number]
+): T[number] {
+  const value = contextString(scope, key) ?? defaultValue;
+  if ((allowed as readonly string[]).includes(value)) return value as T[number];
+  throw new Error(`Invalid CDK context ${key}=${value}. Allowed values: ${allowed.join(", ")}`);
+}
+
+function importedSecret(scope: Construct, id: string, arnContextKey: string, nameContextKey: string): ISecret {
+  const arn = contextString(scope, arnContextKey);
+  if (arn) return Secret.fromSecretCompleteArn(scope, id, arn);
+  const name = contextString(scope, nameContextKey);
+  if (name) return Secret.fromSecretNameV2(scope, id, name);
+  throw new Error(`Missing CDK context: provide ${arnContextKey} or ${nameContextKey}.`);
 }

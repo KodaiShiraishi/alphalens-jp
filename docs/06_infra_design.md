@@ -123,6 +123,7 @@ MVP採用構成:
 - ローカルは `.env.local` を使用し、Git管理しない。
 - AWSはSecrets ManagerまたはSSM Parameter Storeを使用する。
 - フロントエンドに外部APIキーを渡さない。
+- CDKはMock Providerを既定にし、J-Quants/OpenAIを有効化する場合は既存のSecrets Manager secret名または完全ARNをcontextで渡してECS task secretへ接続する。
 
 <a id="monitoring"></a>
 ## 7. 監視・ログ
