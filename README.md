@@ -178,6 +178,7 @@ docker compose up -d postgres
 npm run lint
 npm run typecheck
 npm test
+npm run smoke:local
 npm run build
 npm run db:migrate
 npm run db:seed
@@ -185,10 +186,12 @@ npm run db:seed
 
 `npm test` のAPI結合テストは、既定で `alphalens_test` DBを作成して使用します。誤操作防止のため、DB名に `test` を含まない `DATABASE_URL` では `ALLOW_NON_TEST_DATABASE=true` がない限り破壊的なTRUNCATEを実行しません。
 
+`npm run smoke:local` は、既定で `alphalens_smoke` DBを作成して使用します。別DBで確認したい場合は `ALPHALENS_SMOKE_DATABASE_URL` または `DATABASE_URL` を指定します。
+
 確認済みのスモーク導線:
 
-- `GET /api/health` がDB接続込みで200を返す。
-- CSRF取得、登録、検索、銘柄詳細、Watchlist追加、AIレポート生成がMock Providerで一連動作する。
+- `npm run smoke:local` が実HTTPサーバーを起動し、`GET /api/health` がDB接続込みで200を返す。
+- 実HTTPでCSRF取得、登録、検索、銘柄詳細、Watchlist追加、AIレポート生成、分析履歴、ログアウト後401がMock Providerで一連動作する。
 - AIレポートには免責文、根拠データ、データ制約が含まれる。
 - Watchlistと分析履歴はログインユーザー単位で保存される。
 

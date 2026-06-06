@@ -62,7 +62,7 @@ MVPでは次を作りません。
 - バックエンド: Node.js / TypeScript API、Fastify、Drizzle ORM、外部API連携、認証、集計処理
 - DB: PostgreSQL、drizzle-kit migration、財務時系列データ、分析履歴、Watchlist
 - AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
-- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch、AWS CDK
+- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch Logs/Alarms、AWS CDK
 - 将来拡張: S3 artifact/RAG保存、SQS、EventBridge、Workerによる非同期処理
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 

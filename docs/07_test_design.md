@@ -185,6 +185,8 @@ Playwrightで確認する主要導線:
 8. 分析履歴で確認
 9. ログアウト
 
+CIではブラウザ依存を増やす前段階として、`npm run smoke:local` で実HTTPサーバーを起動し、同等の主要API導線をMock Providerで検証します。Playwrightによるブラウザ操作テストは、公開URLまたはローカル統合環境が安定した段階で追加します。
+
 <a id="smoke-tests"></a>
 ## 9. スモークテスト
 
@@ -197,6 +199,8 @@ Playwrightで確認する主要導線:
 - 銘柄検索できる。
 - AIレポート生成できる。
 - CloudWatch Logsにエラーが出ていない。
+
+ローカル/CIでは `npm run smoke:local` を実行し、CSRF取得、登録、銘柄検索、銘柄詳細、Watchlist追加、AIレポート生成、分析履歴、ログアウト後401を実HTTPで確認します。本番デプロイ後は同じ観点をCloudFront公開URLに対して確認します。
 
 <a id="test-data"></a>
 ## 10. テストデータ
