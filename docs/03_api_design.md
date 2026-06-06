@@ -42,7 +42,9 @@ application/json
 
 ### 2.2 認証
 
-認証が必要なAPIには、HttpOnly CookieまたはBearer Tokenを使用します。MVPではGo APIによるHttpOnly Cookie方式を推奨します。
+認証が必要なAPIには、Go APIが発行するHttpOnly Cookieを使用します。Cookieには不透明なセッショントークンを入れ、DBにはトークンハッシュのみ保存します。
+
+状態変更APIではCSRF対策として `X-CSRF-Token` ヘッダーを要求します。ローカル開発ではNext.jsのプロキシまたは同一siteのAPI URLを使い、本番でもフロントエンドとAPIを同一site配下に置くことを前提にします。
 
 ### 2.3 日付形式
 
@@ -157,6 +159,8 @@ Response:
   "items": [
     {
       "code": "7203",
+      "displayCode": "7203",
+      "providerCode": "72030",
       "name": "トヨタ自動車",
       "nameEn": "TOYOTA MOTOR CORPORATION",
       "market": "Prime",
@@ -180,6 +184,8 @@ Response:
 {
   "stock": {
     "code": "7203",
+    "displayCode": "7203",
+    "providerCode": "72030",
     "name": "トヨタ自動車",
     "nameEn": "TOYOTA MOTOR CORPORATION",
     "market": "Prime",
@@ -354,6 +360,17 @@ Response:
       "次回決算で営業利益率の改善を確認する",
       "地域別販売台数の推移を確認する"
     ],
+    "dataLimitations": [
+      "キャッシュフロー情報はMVPの入力データに含まれていません。"
+    ],
+    "evidence": [
+      {
+        "label": "営業利益",
+        "period": "2026-03-31",
+        "value": 5000000000000,
+        "source": "J-Quants /fins/statements"
+      }
+    ],
     "disclaimer": "このレポートは投資助言ではありません。",
     "inputDataVersion": "hash_...",
     "createdAt": "2026-06-06T12:00:00Z"
@@ -402,7 +419,9 @@ Response:
       "profitability": "...",
       "stability": "...",
       "risks": [],
-      "checkpoints": []
+      "checkpoints": [],
+      "dataLimitations": [],
+      "evidence": []
     },
     "sourceSnapshot": {
       "stockDataUpdatedAt": "2026-06-06T10:00:00Z",
@@ -416,7 +435,7 @@ Response:
 <a id="sync-api"></a>
 ## 7. データ同期API
 
-MVPでは管理者APIとして公開せず、バックエンド内部処理またはCLIで実行してもよいです。
+MVPでは管理者APIとして公開しません。バックエンド内部処理またはCLIで実行します。SQS/Workerを導入した後に、必要であれば管理者専用APIとして公開します。
 
 ### 7.1 銘柄データ更新
 
@@ -474,9 +493,8 @@ Response:
 | --- | --- |
 | email | メール形式、最大255文字 |
 | password | 8文字以上 |
-| stock code | 数字4桁またはJ-Quantsの仕様に合わせたコード |
+| stock code | 4桁入力またはJ-Quantsの5桁コードを許容し、内部で `displayCode` と `providerCode` に正規化する |
 | query | 1文字以上、100文字以下 |
 | limit | 1以上100以下 |
 | from/to | `YYYY-MM-DD`、from <= to |
 | language | `ja` または `en` |
-

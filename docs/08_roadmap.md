@@ -4,7 +4,7 @@
 - [1. 実装方針](#policy)
 - [2. Phase 0: プロジェクト準備](#phase-0)
 - [3. Phase 1: MVPコア](#phase-1)
-- [4. Phase 2: AI分析](#phase-2)
+- [4. Phase 2: J-Quants実連携とAI分析](#phase-2)
 - [5. Phase 3: AWSデプロイ](#phase-3)
 - [6. Phase 4: ポートフォリオ品質化](#phase-4)
 - [7. 将来拡張](#future)
@@ -19,10 +19,11 @@
 
 1. 銘柄検索と詳細表示
 2. 財務・株価データ表示
-3. AI分析レポート生成
-4. Watchlistと履歴保存
-5. AWS公開
-6. テストとREADME整備
+3. J-Quants実データ連携
+4. AI分析レポート生成
+5. Watchlistと履歴保存
+6. AWS公開
+7. テストとREADME整備
 
 <a id="phase-0"></a>
 ## 2. Phase 0: プロジェクト準備
@@ -74,10 +75,16 @@ alphalens-jp/
 - API結合テストが通る。
 
 <a id="phase-2"></a>
-## 4. Phase 2: AI分析
+## 4. Phase 2: J-Quants実連携とAI分析
 
 実装内容:
 
+- J-Quants Provider実装
+- 銘柄コード正規化
+- 株価四本値取得
+- 財務情報取得
+- 外部API取得ログ
+- Mockデータと実データの区別表示
 - AIレポート生成API
 - 構造化入力作成
 - OpenAI Responses API連携
@@ -90,6 +97,8 @@ alphalens-jp/
 
 完了条件:
 
+- 代表銘柄のJ-Quants実データを取得できる。
+- J-Quants APIキーがない環境でもMock Providerで同じ画面が動く。
 - 代表銘柄でAIレポートが生成される。
 - レポートに免責文が表示される。
 - 投資助言表現を避けられる。
@@ -168,12 +177,12 @@ READMEに書くべき内容:
 | P0 | 銘柄検索 | 検索APIと画面 |
 | P0 | 銘柄詳細 | 財務・株価を表示 |
 | P1 | 認証 | 登録、ログイン、ログアウト |
+| P1 | J-Quants実連携 | APIキー取得後にProvider実装 |
 | P1 | Watchlist | 追加、削除、一覧 |
 | P1 | AIレポート | 生成、保存、履歴 |
 | P1 | APIテスト | 主要APIの結合テスト |
 | P2 | AWSデプロイ | ECS/RDS/Secrets/CloudWatch |
 | P2 | CI/CD | GitHub Actions |
 | P2 | README整備 | 採用向け説明を強化 |
-| P3 | J-Quants実連携 | APIキー取得後にProvider実装 |
 | P3 | EDINET連携 | 有報データ拡張 |
 | P3 | RAG | PDF/テキストの根拠引用 |

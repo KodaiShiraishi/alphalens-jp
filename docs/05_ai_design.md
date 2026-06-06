@@ -32,7 +32,9 @@ MVPのAI機能はOpenAI APIで実装します。
 - APIキー: `OPENAI_API_KEY`
 - モデル: `OPENAI_MODEL` 環境変数で指定する
 
-モデルIDはOpenAI側で更新される可能性があるため、実装時点の公式ドキュメントを確認して決めます。MVPでは、コストと品質のバランスがよいGPT-5系のminiモデルを第一候補にします。より高品質な分析が必要な場合は、同じResponses APIのまま上位モデルへ差し替えます。
+モデルIDはOpenAI側で更新される可能性があるため、実装時点の公式ドキュメントを確認して決めます。MVPでは、コストと品質のバランスがよい小型モデルを第一候補にします。より高品質な分析が必要な場合は、同じResponses APIのまま上位モデルへ差し替えます。
+
+Responses APIでは、テキスト出力の `format` に `json_schema` を指定してStructured Outputsを有効にします。実装では、OpenAIから返る `response.id`、使用モデル、入力ハッシュ、スキーマ版をDBに保存します。
 
 <a id="scope"></a>
 ## 3. AIがやること/やらないこと
@@ -106,10 +108,20 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
   "stability": "string",
   "risks": ["string"],
   "checkpoints": ["string"],
+  "evidence": [
+    {
+      "label": "string",
+      "period": "string",
+      "value": "string",
+      "source": "string"
+    }
+  ],
   "dataLimitations": ["string"],
   "disclaimer": "このレポートは投資助言ではありません。"
 }
 ```
+
+`evidence` には、AIが本文で参照した主要指標を入れます。外部URLの引用ではなく、J-QuantsやMock Providerから取得した数値・期間・データソースを表示するためのフィールドです。
 
 <a id="prompt"></a>
 ## 6. プロンプト設計
@@ -146,6 +158,7 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
 - 投資助言ではなく調査メモとして出力する
 - 欠損データがある場合は dataLimitations に書く
 - 数値の根拠を本文内で簡潔に触れる
+- 本文で触れた主要指標を evidence に含める
 
 企業データ:
 {{structured_input_json}}
@@ -174,6 +187,8 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
 
 ただし、企業資料の引用や一般文脈で誤検知する可能性があるため、MVPでは単純なブロックではなく、警告ログと再生成を優先します。
 
+OpenAIの応答が安全上の拒否、スキーマ不一致、不完全出力になった場合は、レポートを保存せず `AI_PROVIDER_ERROR` として扱います。拒否理由やエラー詳細は `analysis_jobs.safety_flags` またはログに保存しますが、ユーザーに内部プロンプトやAPIキーを表示しません。
+
 ### 7.3 UI上の免責
 
 AIレポート画面には次を表示します。
@@ -193,10 +208,11 @@ flowchart TD
   D --> E{"Same report exists?"}
   E -->|Yes| F["Return cached report"]
   E -->|No| G["Call OpenAI Responses API"]
-  G --> H["Validate JSON schema"]
-  H --> I{"Valid and safe?"}
-  I -->|No| J["Retry or fail with warning"]
-  I -->|Yes| K["Save report"]
+  G --> H["Check refusal or incomplete output"]
+  H --> I["Validate JSON schema"]
+  I --> M{"Valid and safe?"}
+  M -->|No| J["Retry or fail with warning"]
+  M -->|Yes| K["Save report"]
   K --> L["Return report"]
 ```
 

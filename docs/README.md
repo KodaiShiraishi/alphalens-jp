@@ -41,7 +41,7 @@ MVPでは次を作ります。
 - Watchlist登録
 - 分析履歴保存
 - ログイン
-- AWS上へのデプロイ
+- AWS上への最小構成デプロイ
 
 MVPでは次を作りません。
 
@@ -59,10 +59,11 @@ MVPでは次を作りません。
 このプロジェクトで見せる技術要素は次です。
 
 - フロントエンド: Next.js、TypeScript、ダッシュボードUI、チャート、フォーム
-- バックエンド: Go API、外部API連携、認証、集計処理、非同期処理
+- バックエンド: Go API、外部API連携、認証、集計処理、データ同期処理
 - DB: PostgreSQL、財務時系列データ、分析履歴、Watchlist
 - AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
-- AWS: ECS/Fargate、RDS、S3、SQS、EventBridge、CloudWatch
+- AWS: ECS/Fargate、RDS、Secrets Manager、CloudWatch
+- 将来拡張: S3、SQS、EventBridge、Workerによる非同期処理
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 
 面接では「株価を当てるアプリ」ではなく、「企業調査の情報収集と分析を効率化するデータSaaS」と説明します。
@@ -93,6 +94,6 @@ Codexが実装に入るときは、次の順で読んでください。
 - J-Quants API docs: https://jpx.gitbook.io/j-quants-ja/api-reference
 - J-Quants API client: https://github.com/J-Quants/jquants-api-client-python
 - EDINET API catalog: https://api-catalog.e-gov.go.jp/info/ja/apicatalog/view/33
-- EDINET DB API: https://edinetdb.jp/docs/api
+- EDINET DB API: https://edinetdb.jp/docs/api （非公式/第三者サービス。MVPでは依存しない）
 - OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses
 - OpenAI Structured Outputs: https://platform.openai.com/docs/guides/structured-outputs
