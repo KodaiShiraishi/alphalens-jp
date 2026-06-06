@@ -43,6 +43,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       return;
     }
     if (error instanceof AppError) {
+      if (error.statusCode >= 500 || error.code === "RATE_LIMITED") {
+        _request.log.warn(
+          { code: error.code, statusCode: error.statusCode, requestId: _request.id },
+          "handled application error"
+        );
+      }
       reply.status(error.statusCode).send({
         error: {
           code: error.code,

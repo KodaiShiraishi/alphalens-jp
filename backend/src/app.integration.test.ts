@@ -170,6 +170,25 @@ describe.sequential("API integration", () => {
     expect(jsonErrorCode(badRange)).toBe("VALIDATION_ERROR");
   });
 
+  it("records provider status codes when external provider calls fail", async () => {
+    const [{ MockMarketDataProvider }, { MarketService }] = await Promise.all([
+      import("./providers/mockProvider.js"),
+      import("./services/marketService.js")
+    ]);
+    const marketService = new MarketService(new MockMarketDataProvider("rate-limit"));
+
+    await expect(marketService.search({ query: "7203", limit: 5 })).rejects.toMatchObject({
+      statusCode: 502,
+      code: "MARKET_DATA_PROVIDER_ERROR"
+    });
+
+    const result = await pool.query(
+      "select status_code from provider_fetch_logs where provider = $1 and endpoint = $2 order by id",
+      ["mock", "searchStocks"]
+    );
+    expect(result.rows.map((row) => row.status_code)).toContain(429);
+  });
+
   it("adds, lists, deduplicates, and deletes watchlist items by normalized code", async () => {
     const { jar } = await register(uniqueEmail());
 
@@ -337,6 +356,55 @@ describe.sequential("API integration", () => {
     expect(detail.statusCode).toBe(200);
     expect(json<{ report: { id: string } }>(detail).report.id).toBe(firstReport.id);
   });
+
+  it("does not save AI reports when generated output is invalid or unsafe", async () => {
+    const { user } = await register(uniqueEmail());
+    const [{ MockMarketDataProvider }, { MarketService }, { ReportService }] = await Promise.all([
+      import("./providers/mockProvider.js"),
+      import("./services/marketService.js"),
+      import("./services/reportService.js")
+    ]);
+
+    const invalidOutputService = new ReportService(
+      new MarketService(new MockMarketDataProvider()),
+      async () => ({ body: { summary: "missing required fields" } })
+    );
+    await expect(
+      invalidOutputService.generateReport({
+        userId: user.id,
+        code: "7203",
+        language: "ja",
+        forceRefresh: true
+      })
+    ).rejects.toMatchObject({ statusCode: 503, code: "AI_PROVIDER_ERROR" });
+    expect(await analysisReportCount(user.id)).toBe(0);
+
+    const unsafeOutputService = new ReportService(
+      new MarketService(new MockMarketDataProvider()),
+      async () => ({
+        body: {
+          summary: "この銘柄は目標株価を提示します。",
+          growth: "売上高の推移を確認します。",
+          profitability: "営業利益率を確認します。",
+          stability: "自己資本比率を確認します。",
+          risks: ["外部APIの取得範囲に制約があります。"],
+          checkpoints: ["次回決算を確認します。"],
+          evidence: [{ label: "営業利益", period: "2026-03-31", value: 100, source: "mock / financial_statements" }],
+          dataLimitations: ["Mock Providerのサンプルデータを使用しています。"],
+          disclaimer: "このレポートは投資助言ではありません。"
+        }
+      })
+    );
+    await expect(
+      unsafeOutputService.generateReport({
+        userId: user.id,
+        code: "7203",
+        language: "ja",
+        forceRefresh: true
+      })
+    ).rejects.toMatchObject({ statusCode: 503, code: "AI_PROVIDER_ERROR" });
+    expect(await analysisReportCount(user.id)).toBe(0);
+  });
 });
 
 async function fetchCsrf(): Promise<CookieJar> {
@@ -392,6 +460,11 @@ function jsonErrorCode(response: InjectResponse): string {
 
 function uniqueEmail(): string {
   return `user-${randomUUID()}@example.com`;
+}
+
+async function analysisReportCount(userId: string): Promise<number> {
+  const result = await pool.query("select count(*)::int as count from analysis_reports where user_id = $1", [userId]);
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 async function ensureTestDatabase(connectionString: string | undefined): Promise<void> {

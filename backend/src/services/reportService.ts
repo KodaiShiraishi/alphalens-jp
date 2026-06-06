@@ -19,8 +19,16 @@ const inputSchemaVersion = "analysis-input-v2";
 const disclaimerPolicy =
   "Do not provide investment advice, target price, buy/sell recommendation, forecast, or guaranteed return.";
 
+export type ReportBodyGenerator = (
+  sourceSnapshot: unknown,
+  language: AnalysisReportLanguage
+) => Promise<{ body: unknown; providerResponseId?: string }>;
+
 export class ReportService {
-  constructor(private readonly marketService: MarketService) {}
+  constructor(
+    private readonly marketService: MarketService,
+    private readonly reportBodyGenerator: ReportBodyGenerator = defaultReportBodyGenerator
+  ) {}
 
   async generateReport(input: {
     userId: string;
@@ -154,12 +162,24 @@ export class ReportService {
     sourceSnapshot: unknown,
     language: AnalysisReportLanguage
   ): Promise<{ body: AnalysisReportBody; providerResponseId?: string }> {
-    if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
-      const result = await callOpenAI(sourceSnapshot, language);
+    let result: { body: unknown; providerResponseId?: string };
+    try {
+      result = await this.reportBodyGenerator(sourceSnapshot, language);
       return { body: analysisReportBodySchema.parse(result.body), providerResponseId: result.providerResponseId };
+    } catch {
+      throw errors.aiProvider();
     }
-    return { body: analysisReportBodySchema.parse(createMockReport(sourceSnapshot as ReportSourceSnapshot, language)) };
   }
+}
+
+async function defaultReportBodyGenerator(
+  sourceSnapshot: unknown,
+  language: AnalysisReportLanguage
+): Promise<{ body: unknown; providerResponseId?: string }> {
+  if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
+    return callOpenAI(sourceSnapshot, language);
+  }
+  return { body: createMockReport(sourceSnapshot as ReportSourceSnapshot, language) };
 }
 
 type ReportSourceSnapshot = {

@@ -1,6 +1,6 @@
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import Home, { FinancialHistory, PriceChart, ReportSourceMeta } from "./page";
+import Home, { FinancialHistory, PriceChart, ReportSourceMeta, StatusBanner } from "./page";
 
 describe("Home page", () => {
   it("renders the MVP research workflow entry points", () => {
@@ -14,9 +14,16 @@ describe("Home page", () => {
     expect(html).toContain("Watchlist");
     expect(html).toContain("分析履歴");
     expect(html).toContain("AIレポート生成");
+    expect(html).toContain("検索結果なし");
     expect(html).toContain("株価データなし");
     expect(html).toContain("財務データなし");
     expect(html).toContain("ログイン後に選択銘柄のAIレポートを生成できます。");
+  });
+
+  it("renders loading and error status states", () => {
+    expect(renderToString(<StatusBanner busy status="" />)).toContain("処理中...");
+    expect(renderToString(<StatusBanner busy={false} status="入力値が不正です。" />)).toContain("入力値が不正です。");
+    expect(renderToString(<StatusBanner busy={false} status="" />)).toBe("");
   });
 
   it("renders an empty state when every close price is missing", () => {

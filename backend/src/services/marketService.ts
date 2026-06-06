@@ -37,6 +37,7 @@ export class MarketService {
         provider: this.provider.name,
         endpoint: "searchStocks",
         status: "failed",
+        statusCode: statusCodeFromError(error),
         requestHash,
         errorMessage: error instanceof Error ? error.message : "unknown error"
       });
@@ -136,6 +137,7 @@ export class MarketService {
         endpoint: "ensureStockData",
         stockCode: null,
         status: "failed",
+        statusCode: statusCodeFromError(error),
         requestHash: stableHash({ code }),
         errorMessage: error instanceof Error ? error.message : "unknown error"
       });
@@ -160,10 +162,17 @@ export class MarketService {
           endpoint,
           stockCode,
           status: "failed",
+          statusCode: statusCodeFromError(error),
           requestHash,
           errorMessage: `attempt ${attempt} failed; retrying attempt ${nextAttempt}: ${error instanceof Error ? error.message : "unknown error"}`
         });
       }
     });
   }
+}
+
+function statusCodeFromError(error: unknown): number | null {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) return null;
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  return typeof statusCode === "number" ? statusCode : null;
 }

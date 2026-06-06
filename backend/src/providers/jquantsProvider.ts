@@ -161,7 +161,7 @@ export class JQuantsProvider implements MarketDataProvider {
         headers: await this.authHeaders(options),
         signal: options?.signal
       });
-      if (!response.ok) throw new Error(`${errorLabel} failed: ${response.status}`);
+      if (!response.ok) throw new JQuantsProviderError(response.status, `${errorLabel} failed: ${response.status}`);
       const payload = (await response.json()) as Record<string, unknown>;
       items.push(...getArrayPayload(payload, payloadKeys));
       paginationKey = nextPaginationKey(payload);
@@ -194,7 +194,7 @@ export class JQuantsProvider implements MarketDataProvider {
         body: JSON.stringify({ mailaddress: env.JQUANTS_EMAIL, password: env.JQUANTS_PASSWORD }),
         signal: options?.signal
       });
-      if (!response.ok) throw new Error(`J-Quants auth_user failed: ${response.status}`);
+      if (!response.ok) throw new JQuantsProviderError(response.status, `J-Quants auth_user failed: ${response.status}`);
       const payload = (await response.json()) as JQuantsTokenResponse;
       this.refreshToken = payload.refreshToken;
     }
@@ -205,11 +205,20 @@ export class JQuantsProvider implements MarketDataProvider {
       method: "POST",
       signal: options?.signal
     });
-    if (!response.ok) throw new Error(`J-Quants auth_refresh failed: ${response.status}`);
+    if (!response.ok) throw new JQuantsProviderError(response.status, `J-Quants auth_refresh failed: ${response.status}`);
     const payload = (await response.json()) as JQuantsIdTokenResponse;
     this.idToken = payload.idToken;
     this.idTokenExpiresAt = Date.now() + 23 * 60 * 60 * 1000;
     return payload.idToken;
+  }
+}
+
+class JQuantsProviderError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string
+  ) {
+    super(message);
   }
 }
 

@@ -237,6 +237,7 @@ export default function Home() {
           )}
         </div>
       </header>
+      <StatusBanner busy={busy} status={status} />
 
       <div className="main-grid">
         <aside className="stack">
@@ -307,17 +308,21 @@ export default function Home() {
                 検索
               </button>
               <div className="results">
-                {stocks.map((stock) => (
-                  <button className="result-row" key={stock.code} onClick={() => selectStock(stock.code)}>
-                    <span className="code">{stock.displayCode}</span>
-                    <span>
-                      <strong>{stock.name}</strong>
-                      <br />
-                      <span className="muted">{stock.market ?? "-"} / {stock.sector33 ?? "-"}</span>
-                    </span>
-                    <span>{yen(stock.lastPrice)}</span>
-                  </button>
-                ))}
+                {stocks.length === 0 ? (
+                  <div className="empty">検索結果なし</div>
+                ) : (
+                  stocks.map((stock) => (
+                    <button className="result-row" key={stock.code} onClick={() => selectStock(stock.code)}>
+                      <span className="code">{stock.displayCode}</span>
+                      <span>
+                        <strong>{stock.name}</strong>
+                        <br />
+                        <span className="muted">{stock.market ?? "-"} / {stock.sector33 ?? "-"}</span>
+                      </span>
+                      <span>{yen(stock.lastPrice)}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </section>
@@ -447,6 +452,15 @@ export default function Home() {
         </section>
       </div>
     </main>
+  );
+}
+
+export function StatusBanner({ busy, status }: { busy: boolean; status: string }) {
+  if (!busy && !status) return null;
+  return (
+    <div className={status ? "status-banner status-banner-error" : "status-banner"} role={status ? "alert" : "status"}>
+      {status || "処理中..."}
+    </div>
   );
 }
 

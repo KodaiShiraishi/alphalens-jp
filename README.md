@@ -203,7 +203,7 @@ npm run db:seed
 | --- | --- |
 | `npm run lint` | pass |
 | `npm run typecheck` | pass |
-| `npm test` | pass: backend 7 files / 27 tests、frontend 2 files / 7 tests |
+| `npm test` | pass: backend 7 files / 29 tests、frontend 2 files / 8 tests |
 | `npm run build` | pass |
 | `npm run smoke:local` | pass |
 | `npm run synth` | pass |

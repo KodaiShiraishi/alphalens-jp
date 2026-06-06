@@ -66,6 +66,23 @@ button:disabled {
   backdrop-filter: blur(12px);
 }
 
+.status-banner {
+  margin: 14px 24px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-banner-error {
+  border-color: #edc38a;
+  background: #fff7e8;
+  color: var(--warning);
+}
+
 .brand {
   display: flex;
   flex-direction: column;

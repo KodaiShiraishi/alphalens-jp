@@ -22,12 +22,21 @@ export function reportRoutes(reportService: ReportService): FastifyPluginAsync {
       const user = await requireUser(request.cookies[sessionCookieName]);
       const code = stockCodeSchema.parse(request.params.code);
       const input = generateSchema.parse(request.body ?? {});
-      return reportService.generateReport({
+      request.log.info(
+        { userId: user.id, stockCode: code, language: input.language, forceRefresh: input.forceRefresh },
+        "analysis report generation started"
+      );
+      const result = await reportService.generateReport({
         userId: user.id,
         code,
         language: input.language,
         forceRefresh: input.forceRefresh
       });
+      request.log.info(
+        { userId: user.id, stockCode: result.report.stockCode, reportId: result.report.id, language: input.language },
+        "analysis report generation succeeded"
+      );
+      return result;
     });
 
     app.get("/analysis-reports", async (request) => {
