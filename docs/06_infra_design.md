@@ -39,7 +39,7 @@ flowchart TB
   SQS --> Worker["ECS Fargate Worker"]
   Worker --> RDS
   Worker --> JQ["J-Quants API"]
-  Worker --> LLM["LLM API"]
+  Worker --> OpenAI["OpenAI Responses API"]
   EventBridge["EventBridge Scheduler"] --> SQS
   ECS --> CW["CloudWatch"]
   Worker --> CW
@@ -117,7 +117,7 @@ MVPではWorkerを省略し、Go API内で同期的にAIレポート生成して
 
 - DB接続情報
 - J-Quants APIキー
-- LLM APIキー
+- OpenAI APIキー
 - Cookie署名キー
 - JWT署名キー
 
@@ -154,7 +154,7 @@ CloudWatch Logsに出力するログ:
 - まずは小さいRDSインスタンスを使う。
 - 開発中は不要な環境を停止する。
 - AIレポート生成はキャッシュする。
-- J-QuantsやLLM APIのレート制限と利用量をログで確認する。
+- J-QuantsやOpenAI APIのレート制限と利用量をログで確認する。
 - S3保存は必要最小限にする。
 
 MVPの目標コスト:
@@ -183,4 +183,3 @@ MVPでは次をIaC化します。
 - SQS
 - Secrets
 - CloudWatch Logs
-

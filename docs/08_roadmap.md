@@ -80,6 +80,8 @@ alphalens-jp/
 
 - AIレポート生成API
 - 構造化入力作成
+- OpenAI Responses API連携
+- Structured Outputs用JSON Schema実装
 - プロンプト実装
 - JSON Schema検証
 - レポート保存
@@ -175,4 +177,3 @@ READMEに書くべき内容:
 | P3 | J-Quants実連携 | APIキー取得後にProvider実装 |
 | P3 | EDINET連携 | 有報データ拡張 |
 | P3 | RAG | PDF/テキストの根拠引用 |
-

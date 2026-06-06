@@ -61,7 +61,7 @@ MVPでは次を作りません。
 - フロントエンド: Next.js、TypeScript、ダッシュボードUI、チャート、フォーム
 - バックエンド: Go API、外部API連携、認証、集計処理、非同期処理
 - DB: PostgreSQL、財務時系列データ、分析履歴、Watchlist
-- AI: 根拠データ付きレポート生成、プロンプト設計、出力検証
+- AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
 - AWS: ECS/Fargate、RDS、S3、SQS、EventBridge、CloudWatch
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 
@@ -94,3 +94,5 @@ Codexが実装に入るときは、次の順で読んでください。
 - J-Quants API client: https://github.com/J-Quants/jquants-api-client-python
 - EDINET API catalog: https://api-catalog.e-gov.go.jp/info/ja/apicatalog/view/33
 - EDINET DB API: https://edinetdb.jp/docs/api
+- OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses
+- OpenAI Structured Outputs: https://platform.openai.com/docs/guides/structured-outputs

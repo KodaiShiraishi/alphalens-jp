@@ -31,7 +31,7 @@ flowchart LR
   Queue --> Worker["Data & AI Worker"]
   Worker --> DB
   Worker --> JQ["J-Quants API"]
-  Worker --> LLM["LLM API"]
+  Worker --> OpenAI["OpenAI Responses API"]
   Worker --> S3["S3"]
   API --> CW["CloudWatch Logs"]
   Worker --> CW
@@ -163,12 +163,12 @@ sequenceDiagram
   participant FE as Frontend
   participant API as Go API
   participant DB as PostgreSQL
-  participant LLM as LLM API
+  participant OpenAI as OpenAI Responses API
 
   FE->>API: POST /api/stocks/{code}/analysis-reports
   API->>DB: 財務/株価/企業情報を取得
-  API->>LLM: 構造化データを渡す
-  LLM-->>API: 分析レポート
+  API->>OpenAI: 構造化データとJSON Schemaを渡す
+  OpenAI-->>API: Structured Outputs形式の分析レポート
   API->>DB: レポート保存
   API-->>FE: レポート返却
 ```
@@ -253,4 +253,3 @@ type MarketDataProvider interface {
 - AI生成失敗率
 - レポート生成数
 - Watchlist登録数
-
