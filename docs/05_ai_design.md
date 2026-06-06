@@ -19,6 +19,8 @@ AI機能の目的は、日本株のファンダメンタルズ調査メモを短
 
 AIは、銘柄の財務データ、株価サマリ、企業基本情報をもとに、成長性、収益性、安全性、リスク、追加確認ポイントを整理します。
 
+MVPの既定出力言語は日本語です。APIで `language: "en"` が指定された場合は英語の調査メモを生成し、同一入力データでも日本語レポートとは別の `input_hash` として扱います。
+
 <a id="provider"></a>
 ## 2. 利用API
 
@@ -91,6 +93,7 @@ AIに渡す入力は、バックエンドで構造化します。
   "missingData": [
     "cash_flow"
   ],
+  "language": "ja",
   "disclaimerPolicy": "Do not provide investment advice, target price, buy/sell recommendation, or guaranteed return."
 }
 ```

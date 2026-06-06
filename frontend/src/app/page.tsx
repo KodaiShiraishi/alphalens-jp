@@ -8,6 +8,7 @@ import {
   resetCsrf,
   type AnalysisReport,
   type AnalysisReportSummary,
+  type FinancialStatement,
   type PricePoint,
   type StockDetail,
   type StockItem,
@@ -20,10 +21,13 @@ export default function Home() {
   const [email, setEmail] = useState("demo@example.com");
   const [password, setPassword] = useState("password123");
   const [query, setQuery] = useState("7203");
+  const [marketFilter, setMarketFilter] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("");
   const [status, setStatus] = useState("");
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [detail, setDetail] = useState<StockDetail | null>(null);
   const [prices, setPrices] = useState<PricePoint[]>([]);
+  const [financials, setFinancials] = useState<FinancialStatement[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [reports, setReports] = useState<AnalysisReportSummary[]>([]);
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -85,13 +89,14 @@ export default function Home() {
     }
   }
 
-  async function search(value = query) {
+  async function search(value = query, market = marketFilter, sector = sectorFilter) {
     setBusy(true);
     setStatus("");
     try {
-      const data = await request<{ items: StockItem[]; total: number }>(
-        `/api/stocks?query=${encodeURIComponent(value)}&limit=20`
-      );
+      const params = new URLSearchParams({ query: value, limit: "20" });
+      if (market) params.set("market", market);
+      if (sector) params.set("sector", sector);
+      const data = await request<{ items: StockItem[]; total: number }>(`/api/stocks?${params.toString()}`);
       setStocks(data.items);
       if (data.items[0]) await selectStock(data.items[0].code);
     } catch (error) {
@@ -105,12 +110,14 @@ export default function Home() {
     setBusy(true);
     setStatus("");
     try {
-      const [detailData, priceData] = await Promise.all([
+      const [detailData, priceData, financialData] = await Promise.all([
         request<StockDetail>(`/api/stocks/${code}`),
-        request<{ items: PricePoint[] }>(`/api/stocks/${code}/prices`)
+        request<{ items: PricePoint[] }>(`/api/stocks/${code}/prices`),
+        request<{ items: FinancialStatement[] }>(`/api/stocks/${code}/financials`)
       ]);
       setDetail(detailData);
       setPrices(priceData.items);
+      setFinancials(financialData.items);
       setReport(null);
       if (user) await loadReports(code);
     } catch (error) {
@@ -195,14 +202,19 @@ export default function Home() {
   }
 
   const latestFinancials = detail?.latestFinancials;
+  const derivedMetrics = latestFinancials?.derivedMetrics;
   const metricItems = useMemo(
     () => [
       ["株価", yen(detail?.latestPrice?.close)],
       ["売上高", bigYen(latestFinancials?.netSales)],
       ["営業利益", bigYen(latestFinancials?.operatingProfit)],
-      ["自己資本比率", percent(latestFinancials?.equityRatio)]
+      ["自己資本比率", percent(latestFinancials?.equityRatio)],
+      ["売上成長率", signedPercent(derivedMetrics?.salesGrowth)],
+      ["営業利益率", percent(derivedMetrics?.operatingMargin)],
+      ["PER", multiple(derivedMetrics?.per)],
+      ["PBR", multiple(derivedMetrics?.pbr)]
     ],
-    [detail, latestFinancials]
+    [detail, derivedMetrics, latestFinancials]
   );
 
   return (
@@ -267,6 +279,29 @@ export default function Home() {
               <div className="field">
                 <label htmlFor="query">コード・企業名</label>
                 <input id="query" className="input" value={query} onChange={(event) => setQuery(event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="market">市場</label>
+                <select
+                  id="market"
+                  className="input"
+                  value={marketFilter}
+                  onChange={(event) => setMarketFilter(event.target.value)}
+                >
+                  <option value="">すべて</option>
+                  <option value="Prime">Prime</option>
+                  <option value="Standard">Standard</option>
+                  <option value="Growth">Growth</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="sector">業種</label>
+                <input
+                  id="sector"
+                  className="input"
+                  value={sectorFilter}
+                  onChange={(event) => setSectorFilter(event.target.value)}
+                />
               </div>
               <button className="button" onClick={() => search()} disabled={busy}>
                 検索
@@ -377,6 +412,7 @@ export default function Home() {
               <div className="chart">
                 <PriceChart prices={prices} />
               </div>
+              <FinancialHistory financials={financials} />
             </div>
           </section>
 
@@ -391,6 +427,7 @@ export default function Home() {
               ) : (
                 <div className="stack">
                   <p>{report.summary}</p>
+                  <ReportSourceMeta report={report} />
                   <div className="report-grid">
                     <ReportSection title="成長性" text={report.body.growth} />
                     <ReportSection title="収益性" text={report.body.profitability} />
@@ -469,6 +506,69 @@ function ReportList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+export function FinancialHistory({ financials }: { financials: FinancialStatement[] }) {
+  const rows = [...financials]
+    .sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))
+    .slice(0, 3);
+  if (rows.length === 0) {
+    return <div className="empty">財務データなし</div>;
+  }
+
+  return (
+    <section className="financial-history">
+      <h2 className="subsection-title">財務履歴</h2>
+      <div className="table-scroll">
+        <table className="financial-table">
+          <thead>
+            <tr>
+              <th>期間</th>
+              <th>売上高</th>
+              <th>営業利益</th>
+              <th>経常利益</th>
+              <th>純利益</th>
+              <th>EPS</th>
+              <th>BPS</th>
+              <th>自己資本比率</th>
+              <th>売上成長率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((item) => (
+              <tr key={`${item.periodType}-${item.periodEnd}`}>
+                <td>{item.periodEnd}</td>
+                <td>{bigYen(item.netSales)}</td>
+                <td>{bigYen(item.operatingProfit)}</td>
+                <td>{bigYen(item.ordinaryProfit)}</td>
+                <td>{bigYen(item.profit)}</td>
+                <td>{yen(item.eps)}</td>
+                <td>{yen(item.bps)}</td>
+                <td>{percent(item.equityRatio)}</td>
+                <td>{signedPercent(item.derivedMetrics?.salesGrowth)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function ReportSourceMeta({ report }: { report: AnalysisReport }) {
+  const snapshot = report.sourceSnapshot;
+  const financialPeriods = snapshot?.financialPeriods?.slice(-3).join(", ") || "-";
+  return (
+    <div className="source-meta">
+      <span>利用データ</span>
+      <span>{sourceLabel(snapshot?.source)} / 更新 {dateTime(snapshot?.stock?.providerUpdatedAt)}</span>
+      <span>株価 {snapshot?.latestPrice?.date ?? "-"}</span>
+      <span>1か月 {signedPercent(snapshot?.priceSummary?.oneMonthChangePct)}</span>
+      <span>3か月 {signedPercent(snapshot?.priceSummary?.threeMonthChangePct)}</span>
+      <span>財務 {snapshot?.latestFinancials?.periodEnd ?? financialPeriods}</span>
+      <span>対象期間 {financialPeriods}</span>
+    </div>
+  );
+}
+
 function EvidenceList({ items }: { items: AnalysisReport["body"]["evidence"] }) {
   return (
     <section className="report-section report-section-wide">
@@ -520,6 +620,11 @@ function signedPercent(value: number | null | undefined): string {
   return `${sign}${(value * 100).toFixed(2)}%`;
 }
 
+function multiple(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return `${value.toFixed(1)}倍`;
+}
+
 function dateTime(value: string | null | undefined): string {
   if (!value) return "-";
   return new Date(value).toLocaleString("ja-JP", {
@@ -530,7 +635,7 @@ function dateTime(value: string | null | undefined): string {
   });
 }
 
-function sourceLabel(provider: StockItem["provider"]): string {
+function sourceLabel(provider: string | null | undefined): string {
   if (provider === "jquants") return "J-Quants";
   if (provider === "mock") return "Mock";
   return "データソース不明";

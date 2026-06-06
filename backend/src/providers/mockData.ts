@@ -47,8 +47,8 @@ export const mockProfiles: StockProfile[] = mockStocks.map(({ lastPrice: _lastPr
 
 export function mockPrices(code: string): DailyPrice[] {
   const base = mockStocks.find((stock) => stock.code === code)?.lastPrice ?? 1000;
-  return Array.from({ length: 60 }).map((_, index) => {
-    const date = daysAgoIso(59 - index);
+  return Array.from({ length: 180 }).map((_, index) => {
+    const date = daysAgoIso(179 - index);
     const movement = Math.sin(index / 5) * 40 + index * 1.8;
     const close = Math.max(1, Number((base + movement).toFixed(2)));
     return {

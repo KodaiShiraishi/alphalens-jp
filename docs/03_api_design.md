@@ -259,7 +259,15 @@ Response:
     "profit": 3900000000000,
     "eps": 250.12,
     "bps": 2800.25,
-    "equityRatio": 0.38
+    "equityRatio": 0.38,
+    "derivedMetrics": {
+      "salesGrowth": 0.0478,
+      "operatingMargin": 0.1111,
+      "netMargin": 0.0867,
+      "roe": 0.1147,
+      "per": 12.08,
+      "pbr": 1.08
+    }
   },
   "dataUpdatedAt": "2026-06-06T12:00:00Z"
 }
@@ -309,7 +317,15 @@ Response:
       "profit": 3900000000000,
       "eps": 250.12,
       "bps": 2800.25,
-      "equityRatio": 0.38
+      "equityRatio": 0.38,
+      "derivedMetrics": {
+        "salesGrowth": 0.0478,
+        "operatingMargin": 0.1111,
+        "netMargin": 0.0867,
+        "roe": 0.1147,
+        "per": 12.08,
+        "pbr": 1.08
+      }
     }
   ]
 }
@@ -439,7 +455,7 @@ Response:
 }
 ```
 
-MVPでは同期生成として扱います。同一 `inputDataVersion` のレポートが存在し、`forceRefresh=false` の場合は既存レポートを返します。新規生成がタイムアウト、拒否応答、スキーマ不一致、禁止表現チェック失敗になった場合はレポートを保存せず `AI_PROVIDER_ERROR` を返します。
+MVPでは同期生成として扱います。同一 `inputDataVersion` のレポートが存在し、`forceRefresh=false` の場合は既存レポートを返します。`language` は `inputDataVersion` の計算対象に含め、日本語レポートと英語レポートを別々に再利用します。新規生成がタイムアウト、拒否応答、スキーマ不一致、禁止表現チェック失敗になった場合はレポートを保存せず `AI_PROVIDER_ERROR` を返します。
 
 ### 7.2 分析履歴取得
 
@@ -487,8 +503,20 @@ Response:
       "evidence": []
     },
     "sourceSnapshot": {
-      "stockDataUpdatedAt": "2026-06-06T10:00:00Z",
-      "financialPeriods": ["2024-03-31", "2025-03-31", "2026-03-31"]
+      "language": "ja",
+      "source": "jquants",
+      "stock": {
+        "providerUpdatedAt": "2026-06-06T10:00:00Z"
+      },
+      "priceSummary": {
+        "latestDate": "2026-06-05",
+        "latestClose": 3021.5,
+        "oneMonthChangePct": 0.034,
+        "threeMonthChangePct": -0.012,
+        "volumeTrend": "increasing"
+      },
+      "financialPeriods": ["2024-03-31", "2025-03-31", "2026-03-31"],
+      "missingData": []
     },
     "createdAt": "2026-06-06T12:00:00Z"
   }

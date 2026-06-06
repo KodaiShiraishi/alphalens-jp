@@ -9,8 +9,12 @@ import type {
 import type { MarketDataProvider } from "./marketDataProvider.js";
 import { mockFinancials, mockPrices, mockProfiles, mockStocks } from "./mockData.js";
 
+type MockProviderMode = "normal" | "rate-limit" | "timeout" | "missing-financials";
+
 export class MockMarketDataProvider implements MarketDataProvider {
   readonly name = "mock" as const;
+
+  constructor(private readonly mode: MockProviderMode = "normal") {}
 
   async normalizeCode(input: string): Promise<StockCode> {
     const normalized = input.trim().replace(/\D/g, "");
@@ -28,6 +32,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async searchStocks(query: StockSearchQuery): Promise<Stock[]> {
+    await this.maybeFail();
     const q = query.query?.trim().toLowerCase();
     return mockStocks
       .filter((stock) => {
@@ -45,6 +50,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getStockProfile(code: string): Promise<StockProfile | null> {
+    await this.maybeFail();
     const normalized = await this.normalizeCode(code);
     return (
       mockProfiles.find(
@@ -55,12 +61,49 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getDailyPrices(code: string): Promise<DailyPrice[]> {
+    await this.maybeFail();
     const normalized = await this.normalizeCode(code);
     return mockPrices(normalized.displayCode);
   }
 
   async getFinancialStatements(code: string): Promise<FinancialStatement[]> {
+    await this.maybeFail();
     const normalized = await this.normalizeCode(code);
+    if (this.mode === "missing-financials") {
+      return mockFinancials(normalized.displayCode).map((item, index) =>
+        index === 0
+          ? {
+              ...item,
+              netSales: null,
+              operatingProfit: null,
+              profit: null,
+              eps: null,
+              bps: null,
+              equityRatio: null,
+              operatingCashFlow: null,
+              freeCashFlow: null
+            }
+          : item
+      );
+    }
     return mockFinancials(normalized.displayCode);
+  }
+
+  private async maybeFail(): Promise<void> {
+    if (this.mode === "rate-limit") {
+      throw new MockProviderError(429, "Mock provider rate limited the request.");
+    }
+    if (this.mode === "timeout") {
+      throw new MockProviderError(408, "Mock provider request timed out.");
+    }
+  }
+}
+
+export class MockProviderError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string
+  ) {
+    super(message);
   }
 }

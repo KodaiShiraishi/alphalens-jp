@@ -1,7 +1,18 @@
 import { z } from "zod";
 import type { AnalysisReportBody } from "../types/domain.js";
 
-export const analysisReportDisclaimer = "このレポートは投資助言ではありません。";
+export type AnalysisReportLanguage = "ja" | "en";
+
+export const analysisReportDisclaimers = {
+  ja: "このレポートは投資助言ではありません。",
+  en: "This report is not investment advice."
+} as const;
+
+export const analysisReportDisclaimer = analysisReportDisclaimers.ja;
+
+export function analysisReportDisclaimerFor(language: AnalysisReportLanguage): string {
+  return analysisReportDisclaimers[language];
+}
 
 export const analysisReportBodySchema = z.object({
   summary: z.string().min(1),
@@ -62,7 +73,22 @@ export const analysisReportJsonSchema = {
   }
 } as const;
 
-const prohibitedPatterns = [/買い推奨/, /売り推奨/, /買うべき/, /売るべき/, /必ず上がる/, /目標株価/, /投資すべき/, /利益保証/];
+const prohibitedPatterns = [
+  /買い推奨/,
+  /売り推奨/,
+  /買うべき/,
+  /売るべき/,
+  /必ず上がる/,
+  /目標株価/,
+  /投資すべき/,
+  /利益保証/,
+  /buy recommendation/i,
+  /sell recommendation/i,
+  /should buy/i,
+  /should sell/i,
+  /target price/i,
+  /guaranteed return/i
+];
 
 export function validateReportSafety(body: AnalysisReportBody): { ok: boolean; flags: string[] } {
   const text = JSON.stringify(body);

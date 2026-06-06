@@ -54,6 +54,16 @@ export type FinancialStatement = {
   equity?: number | null;
   operatingCashFlow?: number | null;
   freeCashFlow?: number | null;
+  derivedMetrics?: DerivedMetrics;
+};
+
+export type DerivedMetrics = {
+  salesGrowth: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  roe: number | null;
+  per: number | null;
+  pbr: number | null;
 };
 
 export type AnalysisReportBody = {

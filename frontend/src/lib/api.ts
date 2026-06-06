@@ -43,6 +43,14 @@ export type FinancialStatement = {
   eps: number | null;
   bps: number | null;
   equityRatio: number | null;
+  derivedMetrics?: {
+    salesGrowth: number | null;
+    operatingMargin: number | null;
+    netMargin: number | null;
+    roe: number | null;
+    per: number | null;
+    pbr: number | null;
+  };
 };
 
 export type AnalysisReport = {
@@ -60,10 +68,37 @@ export type AnalysisReport = {
     dataLimitations: string[];
     disclaimer: string;
   };
-  sourceSnapshot?: unknown;
+  sourceSnapshot?: ReportSourceSnapshot;
   disclaimer: string;
   inputDataVersion: string;
   createdAt: string;
+};
+
+export type ReportSourceSnapshot = {
+  language?: "ja" | "en";
+  source?: "mock" | "jquants" | string;
+  stock?: {
+    provider?: "mock" | "jquants" | string;
+    providerUpdatedAt?: string | null;
+  };
+  latestPrice?: {
+    date?: string | null;
+    close?: number | null;
+  } | null;
+  priceSummary?: {
+    latestDate: string | null;
+    latestClose: number | null;
+    oneMonthChangePct: number | null;
+    threeMonthChangePct: number | null;
+    volumeTrend: "increasing" | "decreasing" | "flat" | "unknown";
+  };
+  latestFinancials?: {
+    periodEnd?: string | null;
+  } | null;
+  pricePoints?: number;
+  financialPeriods?: string[];
+  missingData?: string[];
+  disclaimerPolicy?: string;
 };
 
 export type AnalysisReportSummary = {

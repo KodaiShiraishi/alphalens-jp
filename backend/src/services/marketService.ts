@@ -9,7 +9,6 @@ import {
   findStock,
   findStocks,
   latestDailyPrice,
-  latestFinancialStatement,
   listDailyPrices,
   listFinancialStatements,
   logProviderFetch,
@@ -17,6 +16,7 @@ import {
   upsertFinancialStatements,
   upsertStock
 } from "../repositories/marketRepository.js";
+import { attachDerivedMetrics } from "./metrics.js";
 
 export class MarketService {
   constructor(private readonly provider: MarketDataProvider) {}
@@ -67,8 +67,12 @@ export class MarketService {
     const normalized = await this.provider.normalizeCode(code);
     const profile = await findStock(normalized.displayCode);
     if (!profile) throw errors.stockNotFound();
-    const latestPrice = await latestDailyPrice(profile.code);
-    const latestFinancials = await latestFinancialStatement(profile.code);
+    const [latestPrice, financials] = await Promise.all([
+      latestDailyPrice(profile.code),
+      listFinancialStatements(profile.code)
+    ]);
+    const financialsWithMetrics = attachDerivedMetrics(financials, latestPrice?.close ?? null);
+    const latestFinancials = financialsWithMetrics.at(-1) ?? null;
     return {
       stock: { ...profile, lastPrice: latestPrice?.close ?? null },
       latestPrice,
@@ -86,7 +90,11 @@ export class MarketService {
   async getFinancials(code: string): Promise<FinancialStatement[]> {
     await this.ensureStockData(code);
     const normalized = await this.provider.normalizeCode(code);
-    return listFinancialStatements(normalized.displayCode);
+    const [latestPrice, statements] = await Promise.all([
+      latestDailyPrice(normalized.displayCode),
+      listFinancialStatements(normalized.displayCode)
+    ]);
+    return attachDerivedMetrics(statements, latestPrice?.close ?? null);
   }
 
   async ensureStockData(code: string): Promise<void> {

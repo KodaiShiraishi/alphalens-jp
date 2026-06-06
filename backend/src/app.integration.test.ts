@@ -105,6 +105,19 @@ describe.sequential("API integration", () => {
     expect(privateApi.statusCode).toBe(401);
   });
 
+  it("rejects expired sessions for user lookup and private APIs", async () => {
+    const session = await register(uniqueEmail());
+    await pool.query("update sessions set expires_at = now() - interval '1 minute' where user_id = $1", [session.user.id]);
+
+    const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: headers(session.jar, false) });
+    expect(me.statusCode).toBe(200);
+    expect(json<{ user: unknown | null }>(me).user).toBeNull();
+
+    const privateApi = await app.inject({ method: "GET", url: "/api/watchlist", headers: headers(session.jar, false) });
+    expect(privateApi.statusCode).toBe(401);
+    expect(jsonErrorCode(privateApi)).toBe("UNAUTHORIZED");
+  });
+
   it("searches stocks, normalizes provider codes, and validates query/date input", async () => {
     const search = await app.inject({ method: "GET", url: "/api/stocks?query=72030&limit=5" });
     expect(search.statusCode).toBe(200);
@@ -112,9 +125,22 @@ describe.sequential("API integration", () => {
     expect(searchBody.total).toBe(1);
     expect(searchBody.items[0]).toMatchObject({ code: "7203", providerCode: "72030", name: "トヨタ自動車" });
 
+    const filtered = await app.inject({ method: "GET", url: "/api/stocks?query=7203&market=Prime&sector=輸送&limit=5" });
+    expect(filtered.statusCode).toBe(200);
+    expect(json<{ items: Array<{ code: string }> }>(filtered).items).toHaveLength(1);
+    expect(json<{ items: Array<{ code: string }> }>(filtered).items[0]).toMatchObject({ code: "7203" });
+
     const detail = await app.inject({ method: "GET", url: "/api/stocks/72030" });
     expect(detail.statusCode).toBe(200);
-    expect(json<{ stock: { code: string }; latestPrice: unknown; latestFinancials: unknown }>(detail).stock.code).toBe("7203");
+    const detailBody = json<{
+      stock: { code: string };
+      latestPrice: unknown;
+      latestFinancials: { derivedMetrics: { salesGrowth: number | null; operatingMargin: number | null; per: number | null } };
+    }>(detail);
+    expect(detailBody.stock.code).toBe("7203");
+    expect(detailBody.latestFinancials.derivedMetrics.salesGrowth).toBeGreaterThan(0);
+    expect(detailBody.latestFinancials.derivedMetrics.operatingMargin).toBeGreaterThan(0);
+    expect(detailBody.latestFinancials.derivedMetrics.per).toBeGreaterThan(0);
 
     const prices = await app.inject({ method: "GET", url: "/api/stocks/7203/prices?from=2025-01-01&to=2026-12-31" });
     expect(prices.statusCode).toBe(200);
@@ -122,7 +148,10 @@ describe.sequential("API integration", () => {
 
     const financials = await app.inject({ method: "GET", url: "/api/stocks/7203/financials" });
     expect(financials.statusCode).toBe(200);
-    expect(json<{ items: unknown[] }>(financials).items.length).toBeGreaterThan(0);
+    const financialItems = json<{ items: Array<{ derivedMetrics: { salesGrowth: number | null; pbr: number | null } }> }>(financials).items;
+    expect(financialItems.length).toBeGreaterThan(0);
+    expect(financialItems.at(-1)?.derivedMetrics.salesGrowth).toBeGreaterThan(0);
+    expect(financialItems.at(-1)?.derivedMetrics.pbr).toBeGreaterThan(0);
 
     const emptyQuery = await app.inject({ method: "GET", url: "/api/stocks?query=" });
     expect(emptyQuery.statusCode).toBe(400);
@@ -177,6 +206,39 @@ describe.sequential("API integration", () => {
     expect(json<{ items: unknown[] }>(empty).items).toHaveLength(0);
   });
 
+  it("keeps watchlist and analysis reports isolated per user", async () => {
+    const first = await register(uniqueEmail());
+    const second = await register(uniqueEmail());
+
+    const added = await app.inject({
+      method: "POST",
+      url: "/api/watchlist",
+      headers: headers(first.jar),
+      payload: { code: "7203" }
+    });
+    expect(added.statusCode).toBe(200);
+
+    const generated = await app.inject({
+      method: "POST",
+      url: "/api/stocks/7203/analysis-reports",
+      headers: headers(first.jar),
+      payload: { language: "ja", forceRefresh: false }
+    });
+    expect(generated.statusCode).toBe(200);
+
+    const firstWatchlist = await app.inject({ method: "GET", url: "/api/watchlist", headers: headers(first.jar, false) });
+    expect(json<{ items: unknown[] }>(firstWatchlist).items).toHaveLength(1);
+
+    const secondWatchlist = await app.inject({ method: "GET", url: "/api/watchlist", headers: headers(second.jar, false) });
+    expect(json<{ items: unknown[] }>(secondWatchlist).items).toHaveLength(0);
+
+    const firstReports = await app.inject({ method: "GET", url: "/api/analysis-reports?limit=20", headers: headers(first.jar, false) });
+    expect(json<{ items: unknown[] }>(firstReports).items).toHaveLength(1);
+
+    const secondReports = await app.inject({ method: "GET", url: "/api/analysis-reports?limit=20", headers: headers(second.jar, false) });
+    expect(json<{ items: unknown[] }>(secondReports).items).toHaveLength(0);
+  });
+
   it("generates, reuses, lists, and fetches mock AI reports with evidence and disclaimer", async () => {
     const { jar } = await register(uniqueEmail());
 
@@ -193,7 +255,22 @@ describe.sequential("API integration", () => {
         stockCode: string;
         title: string;
         body: { evidence: unknown[]; dataLimitations: string[]; disclaimer: string };
-        sourceSnapshot: { source: string };
+        sourceSnapshot: {
+          source: string;
+          stock: { providerUpdatedAt: string | null };
+          latestPrice: { date: string };
+          priceSummary: {
+            latestDate: string | null;
+            latestClose: number | null;
+            oneMonthChangePct: number | null;
+            threeMonthChangePct: number | null;
+            volumeTrend: string;
+          };
+          latestFinancials: { periodEnd: string };
+          financialPeriods: string[];
+          missingData: string[];
+          disclaimerPolicy: string;
+        };
       };
     }>(generated).report;
     expect(firstReport.stockCode).toBe("7203");
@@ -202,6 +279,17 @@ describe.sequential("API integration", () => {
     expect(firstReport.body.dataLimitations.join(" ")).toContain("Mock Provider");
     expect(firstReport.body.disclaimer).toContain("投資助言ではありません");
     expect(firstReport.sourceSnapshot.source).toBe("mock");
+    expect(firstReport.sourceSnapshot.stock.providerUpdatedAt).toBeTruthy();
+    expect(firstReport.sourceSnapshot.latestPrice.date).toBeTruthy();
+    expect(firstReport.sourceSnapshot.priceSummary.latestDate).toBeTruthy();
+    expect(firstReport.sourceSnapshot.priceSummary.latestClose).toBeGreaterThan(0);
+    expect(firstReport.sourceSnapshot.priceSummary.oneMonthChangePct).not.toBeNull();
+    expect(firstReport.sourceSnapshot.priceSummary.threeMonthChangePct).not.toBeNull();
+    expect(["increasing", "decreasing", "flat", "unknown"]).toContain(firstReport.sourceSnapshot.priceSummary.volumeTrend);
+    expect(firstReport.sourceSnapshot.latestFinancials.periodEnd).toBe("2026-03-31");
+    expect(firstReport.sourceSnapshot.financialPeriods).toContain("2026-03-31");
+    expect(firstReport.sourceSnapshot.missingData).toEqual([]);
+    expect(firstReport.sourceSnapshot.disclaimerPolicy).toContain("Do not provide investment advice");
 
     const reused = await app.inject({
       method: "POST",
@@ -212,13 +300,30 @@ describe.sequential("API integration", () => {
     expect(reused.statusCode).toBe(200);
     expect(json<{ report: { id: string } }>(reused).report.id).toBe(firstReport.id);
 
+    const english = await app.inject({
+      method: "POST",
+      url: "/api/stocks/7203/analysis-reports",
+      headers: headers(jar),
+      payload: { language: "en", forceRefresh: false }
+    });
+    expect(english.statusCode).toBe(200);
+    const englishReport = json<{
+      report: { id: string; title: string; body: { disclaimer: string; evidence: Array<{ label: string }> } };
+    }>(english).report;
+    expect(englishReport.id).not.toBe(firstReport.id);
+    expect(englishReport.title).toBe("TOYOTA MOTOR CORPORATION Fundamental Research Memo");
+    expect(englishReport.body.disclaimer).toBe("This report is not investment advice.");
+    expect(englishReport.body.evidence[0]?.label).toBe("Operating profit");
+
     const list = await app.inject({
       method: "GET",
       url: "/api/analysis-reports?code=72030&limit=20",
       headers: headers(jar, false)
     });
     expect(list.statusCode).toBe(200);
-    expect(json<{ items: Array<{ id: string; stockCode: string; stockName: string }> }>(list).items[0]).toMatchObject({
+    const reportItems = json<{ items: Array<{ id: string; stockCode: string; stockName: string }> }>(list).items;
+    expect(reportItems).toHaveLength(2);
+    expect(reportItems.find((item) => item.id === firstReport.id)).toMatchObject({
       id: firstReport.id,
       stockCode: "7203",
       stockName: "トヨタ自動車"

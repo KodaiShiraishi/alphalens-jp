@@ -197,6 +197,17 @@ npm run db:seed
 - AIレポートには免責文、根拠データ、データ制約が含まれる。
 - Watchlistと分析履歴はログインユーザー単位で保存される。
 
+直近の検証結果（2026-06-07 JST）:
+
+| コマンド | 結果 |
+| --- | --- |
+| `npm run lint` | pass |
+| `npm run typecheck` | pass |
+| `npm test` | pass: backend 7 files / 27 tests、frontend 2 files / 7 tests |
+| `npm run build` | pass |
+| `npm run smoke:local` | pass |
+| `npm run synth` | pass |
+
 AWS公開URLへのデプロイは `infra/` のCDKで実行する想定です。デプロイ後はCloudFront URL、API health、ログイン、銘柄検索、AIレポート生成、CloudWatch Logs/Alarmsを確認します。
 
 CDKはデフォルトでは `MARKET_DATA_PROVIDER=mock`、`AI_PROVIDER=mock` でデプロイします。実APIを使う場合は、先にSecrets Managerへキーを保存し、contextでsecret名または完全ARNを渡します。

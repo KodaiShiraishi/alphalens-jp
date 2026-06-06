@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { analysisReportBodySchema, analysisReportDisclaimer, validateReportSafety } from "./analysisReportPolicy.js";
+import {
+  analysisReportBodySchema,
+  analysisReportDisclaimer,
+  analysisReportDisclaimerFor,
+  validateReportSafety
+} from "./analysisReportPolicy.js";
 import type { AnalysisReportBody } from "../types/domain.js";
 
 const baseReport: AnalysisReportBody = {
@@ -32,5 +37,16 @@ describe("analysis report policy", () => {
 
     expect(validateReportSafety(unsafe)).toEqual({ ok: false, flags: ["買い推奨"] });
     expect(validateReportSafety(baseReport)).toEqual({ ok: true, flags: [] });
+  });
+
+  it("supports English disclaimer and prohibited wording checks", () => {
+    const unsafe = {
+      ...baseReport,
+      summary: "This includes a target price.",
+      disclaimer: analysisReportDisclaimerFor("en")
+    };
+
+    expect(unsafe.disclaimer).toBe("This report is not investment advice.");
+    expect(validateReportSafety(unsafe)).toEqual({ ok: false, flags: ["target price"] });
   });
 });
