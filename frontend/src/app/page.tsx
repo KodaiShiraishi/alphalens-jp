@@ -413,11 +413,14 @@ export default function Home() {
   );
 }
 
-function PriceChart({ prices }: { prices: PricePoint[] }) {
+export function PriceChart({ prices }: { prices: PricePoint[] }) {
   if (prices.length === 0) {
     return <div className="empty">株価データなし</div>;
   }
   const closes = prices.map((price) => price.close ?? 0).filter((value) => value > 0);
+  if (closes.length === 0) {
+    return <div className="empty">終値データなし</div>;
+  }
   const min = Math.min(...closes);
   const max = Math.max(...closes);
   const width = 800;

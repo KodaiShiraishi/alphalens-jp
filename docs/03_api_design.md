@@ -542,6 +542,7 @@ Response:
 | 401 | UNAUTHORIZED | 未ログイン |
 | 403 | FORBIDDEN | 権限なし |
 | 403 | CSRF_TOKEN_INVALID | CSRFトークンなし、または不一致 |
+| 403 | REGISTRATION_DISABLED | 公開デモなどで新規登録が停止されている |
 | 404 | STOCK_NOT_FOUND | 銘柄なし |
 | 404 | REPORT_NOT_FOUND | レポートなし |
 | 409 | USER_ALREADY_EXISTS | 登録済みメールアドレス |
@@ -560,6 +561,6 @@ Response:
 | password | 8文字以上 |
 | stock code | 4桁入力またはJ-Quantsの5桁コードを許容し、内部で `displayCode` と `providerCode` に正規化する |
 | query | 1文字以上、100文字以下 |
-| limit | 1以上100以下 |
+| limit | 銘柄検索は1以上50以下。分析履歴は1以上100以下 |
 | from/to | `YYYY-MM-DD`、from <= to |
 | language | `ja` または `en` |

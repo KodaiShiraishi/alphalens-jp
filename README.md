@@ -145,6 +145,8 @@ AWSのECSタスクでは `RUN_MIGRATIONS_ON_START=true` を設定し、コンテ
 
 状態変更APIはすべて `al_csrf` Cookie と `X-CSRF-Token` ヘッダーを照合します。セッションCookieは本番で `__Host-al_session`、ローカルHTTPで `al_session` を使います。
 
+公開デモでは `REGISTRATION_ENABLED=false` にすると新規登録を停止し、既存のデモユーザーだけでログイン確認できます。登録APIには `REGISTER_RATE_LIMIT_MAX` / `REGISTER_RATE_LIMIT_TIME_WINDOW` による専用レート制限も設定できます。
+
 <a id="db-summary"></a>
 ## 7. DB設計サマリ
 

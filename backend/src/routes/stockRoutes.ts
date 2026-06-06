@@ -1,15 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import type { MarketService } from "../services/marketService.js";
+import { isIsoDate } from "../utils/dates.js";
 
 const stockCodeSchema = z.string().regex(/^\d{4,5}$/, "stock code must be four or five digits");
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD");
+const dateSchema = z.string().refine(isIsoDate, "date must be a valid YYYY-MM-DD date");
 
 const searchSchema = z.object({
   query: z.string().trim().min(1).max(100).optional(),
   market: z.string().optional(),
   sector: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20)
+  limit: z.coerce.number().int().min(1).max(50).default(20)
 });
 
 const priceSchema = z

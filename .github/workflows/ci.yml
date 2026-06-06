@@ -31,7 +31,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install
+      - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
         env:
@@ -42,7 +43,7 @@ jobs:
           AI_PROVIDER: mock
       - run: npm run smoke:local
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/alphalens_test
+          ALPHALENS_SMOKE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/alphalens_smoke
           SESSION_SECRET: ci-session-secret-for-local-smoke
           COOKIE_SECURE: "false"
           MARKET_DATA_PROVIDER: mock

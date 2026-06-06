@@ -125,6 +125,7 @@ MVP採用構成:
 - AWSはSecrets ManagerまたはSSM Parameter Storeを使用する。
 - フロントエンドに外部APIキーを渡さない。
 - CDKはMock Providerを既定にし、J-Quants/OpenAIを有効化する場合は既存のSecrets Manager secret名または完全ARNをcontextで渡してECS task secretへ接続する。
+- 公開デモで不特定多数の登録を避けたい場合は、CDK context `registrationEnabled=false` を指定し、ECS環境変数 `REGISTRATION_ENABLED=false` として新規登録を停止する。登録を開放する場合も `REGISTER_RATE_LIMIT_MAX` / `REGISTER_RATE_LIMIT_TIME_WINDOW` で登録APIだけを厳しめに制限する。
 
 <a id="monitoring"></a>
 ## 7. 監視・ログ

@@ -20,19 +20,26 @@ describe("JQuantsProvider", () => {
     const calls: Array<{ url: string; headers: HeadersInit | undefined }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
+      const parsedUrl = new URL(url);
       calls.push({ url, headers: init?.headers });
       if (url.includes("/equities/master")) {
+        if (parsedUrl.searchParams.get("pagination_key") === "next-page") {
+          return jsonResponse({
+            data: [
+              {
+                Code: "72030",
+                CoName: "トヨタ自動車",
+                CoNameEn: "TOYOTA MOTOR CORPORATION",
+                MktName: "Prime",
+                S17Name: "Automobiles & Transportation Equipment",
+                S33Name: "輸送用機器"
+              }
+            ]
+          });
+        }
         return jsonResponse({
-          data: [
-            {
-              Code: "72030",
-              CoName: "トヨタ自動車",
-              CoNameEn: "TOYOTA MOTOR CORPORATION",
-              MktName: "Prime",
-              S17Name: "Automobiles & Transportation Equipment",
-              S33Name: "輸送用機器"
-            }
-          ]
+          data: [{ Code: "67580", CoName: "ソニーグループ", CoNameEn: "SONY GROUP CORPORATION" }],
+          pagination_key: "next-page"
         });
       }
       if (url.includes("/equities/bars/daily")) {
@@ -81,6 +88,7 @@ describe("JQuantsProvider", () => {
     expect(prices[0]).toMatchObject({ date: "2026-06-05", close: 3021.5, adjustedClose: 3021.5 });
     expect(financials[0]).toMatchObject({ periodType: "FY", periodEnd: "2026-03-31", netSales: 45000000000000 });
     expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+      "/v2/equities/master",
       "/v2/equities/master",
       "/v2/equities/bars/daily",
       "/v2/fins/summary"

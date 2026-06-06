@@ -128,6 +128,14 @@ describe.sequential("API integration", () => {
     expect(emptyQuery.statusCode).toBe(400);
     expect(jsonErrorCode(emptyQuery)).toBe("VALIDATION_ERROR");
 
+    const tooLargeLimit = await app.inject({ method: "GET", url: "/api/stocks?query=7203&limit=51" });
+    expect(tooLargeLimit.statusCode).toBe(400);
+    expect(jsonErrorCode(tooLargeLimit)).toBe("VALIDATION_ERROR");
+
+    const invalidDate = await app.inject({ method: "GET", url: "/api/stocks/7203/prices?from=2026-99-99" });
+    expect(invalidDate.statusCode).toBe(400);
+    expect(jsonErrorCode(invalidDate)).toBe("VALIDATION_ERROR");
+
     const badRange = await app.inject({ method: "GET", url: "/api/stocks/7203/prices?from=2026-12-31&to=2026-01-01" });
     expect(badRange.statusCode).toBe(400);
     expect(jsonErrorCode(badRange)).toBe("VALIDATION_ERROR");

@@ -13,6 +13,8 @@ export const errors = {
   forbidden: () => new AppError(403, "FORBIDDEN", "権限がありません。"),
   csrf: () => new AppError(403, "CSRF_TOKEN_INVALID", "CSRFトークンが不正です。"),
   validation: (message = "入力値が不正です。") => new AppError(400, "VALIDATION_ERROR", message),
+  rateLimited: () => new AppError(429, "RATE_LIMITED", "リクエスト数が上限を超えました。時間を置いて再試行してください。"),
+  registrationDisabled: () => new AppError(403, "REGISTRATION_DISABLED", "現在、新規登録は停止しています。"),
   userAlreadyExists: () => new AppError(409, "USER_ALREADY_EXISTS", "このメールアドレスは登録済みです。"),
   stockNotFound: () => new AppError(404, "STOCK_NOT_FOUND", "銘柄が見つかりません。"),
   reportNotFound: () => new AppError(404, "REPORT_NOT_FOUND", "レポートが見つかりません。"),

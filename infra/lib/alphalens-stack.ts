@@ -100,14 +100,20 @@ export class AlphaLensStack extends Stack {
     });
     const marketDataProvider = enumContext(this, "marketDataProvider", allowedMarketDataProviders, "mock");
     const aiProvider = enumContext(this, "aiProvider", allowedAiProviders, "mock");
+    const registrationEnabled = enumContext(this, "registrationEnabled", ["true", "false"] as const, "true");
+    const registerRateLimitMax = contextString(this, "registerRateLimitMax") ?? "10";
+    const registerRateLimitTimeWindow = contextString(this, "registerRateLimitTimeWindow") ?? "1 minute";
     const jquantsApiVersion = enumContext(this, "jquantsApiVersion", allowedJQuantsApiVersions, "v2");
     const jquantsApiBaseUrl =
       contextString(this, "jquantsApiBaseUrl") ??
       (jquantsApiVersion === "v2" ? "https://api.jquants.com/v2" : "https://api.jquants.com/v1");
-    const openAiModel = contextString(this, "openAiModel") ?? "gpt-4.1-mini";
+    const openAiModel = contextString(this, "openAiModel") ?? "gpt-5-mini";
     const containerEnvironment: Record<string, string> = {
       NODE_ENV: "production",
       RUN_MIGRATIONS_ON_START: "true",
+      REGISTRATION_ENABLED: registrationEnabled,
+      REGISTER_RATE_LIMIT_MAX: registerRateLimitMax,
+      REGISTER_RATE_LIMIT_TIME_WINDOW: registerRateLimitTimeWindow,
       COOKIE_SECURE: "true",
       MARKET_DATA_PROVIDER: marketDataProvider,
       MARKET_DATA_MAX_RETRIES: "2",

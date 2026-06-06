@@ -9,7 +9,8 @@ import {
   setCsrfCookie,
   setSessionCookie
 } from "../services/authService.js";
-import { sessionCookieName } from "../config/env.js";
+import { env, sessionCookieName } from "../config/env.js";
+import { errors } from "../utils/errors.js";
 
 const authSchema = z.object({
   email: z.string().email().max(255),
@@ -22,13 +23,27 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return { csrfToken };
   });
 
-  app.post("/auth/register", async (request, reply) => {
-    const input = authSchema.parse(request.body);
-    const { user, sessionToken } = await registerUser(input.email, input.password);
-    setSessionCookie(reply, sessionToken);
-    setCsrfCookie(reply);
-    return { user };
-  });
+  app.post(
+    "/auth/register",
+    {
+      config: {
+        rateLimit: {
+          max: env.REGISTER_RATE_LIMIT_MAX,
+          timeWindow: env.REGISTER_RATE_LIMIT_TIME_WINDOW
+        }
+      }
+    },
+    async (request, reply) => {
+      if (env.REGISTRATION_ENABLED !== "true") {
+        throw errors.registrationDisabled();
+      }
+      const input = authSchema.parse(request.body);
+      const { user, sessionToken } = await registerUser(input.email, input.password);
+      setSessionCookie(reply, sessionToken);
+      setCsrfCookie(reply);
+      return { user };
+    }
+  );
 
   app.post("/auth/login", async (request, reply) => {
     const input = authSchema.parse(request.body);

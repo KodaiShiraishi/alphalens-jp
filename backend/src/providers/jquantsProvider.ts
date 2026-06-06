@@ -32,19 +32,21 @@ export class JQuantsProvider implements MarketDataProvider {
   }
 
   async searchStocks(query: StockSearchQuery, options?: ProviderRequestOptions): Promise<Stock[]> {
-    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/equities/master" : "/listed/info");
+    const path = env.JQUANTS_API_VERSION === "v2" ? "/equities/master" : "/listed/info";
     const normalizedQuery = query.query?.trim().replace(/\D/g, "");
-    if (normalizedQuery && /^\d{4,5}$/.test(normalizedQuery)) {
-      url.searchParams.set("code", normalizedQuery);
-    }
-    const response = await fetch(url, {
-      headers: await this.authHeaders(options),
-      signal: options?.signal
-    });
-    if (!response.ok) throw new Error(`J-Quants listed info failed: ${response.status}`);
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payloadItems = await this.getPaginatedPayload(
+      path,
+      (url) => {
+        if (normalizedQuery && /^\d{4,5}$/.test(normalizedQuery)) {
+          url.searchParams.set("code", normalizedQuery);
+        }
+      },
+      ["data", "info"],
+      "J-Quants listed info",
+      options
+    );
     const q = query.query?.trim().toLowerCase();
-    return getArrayPayload(payload, ["data", "info"])
+    return payloadItems
       .map((item) => this.mapListedInfo(item))
       .filter((stock) => {
         if (!q) return true;
@@ -64,17 +66,18 @@ export class JQuantsProvider implements MarketDataProvider {
 
   async getDailyPrices(code: string, from: Date, to: Date, options?: ProviderRequestOptions): Promise<DailyPrice[]> {
     const normalized = await this.normalizeCode(code);
-    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/equities/bars/daily" : "/prices/daily_quotes");
-    url.searchParams.set("code", normalized.providerCode);
-    url.searchParams.set("from", from.toISOString().slice(0, 10).replaceAll("-", ""));
-    url.searchParams.set("to", to.toISOString().slice(0, 10).replaceAll("-", ""));
-    const response = await fetch(url, {
-      headers: await this.authHeaders(options),
-      signal: options?.signal
-    });
-    if (!response.ok) throw new Error(`J-Quants daily quotes failed: ${response.status}`);
-    const payload = (await response.json()) as Record<string, unknown>;
-    return getArrayPayload(payload, ["data", "daily_quotes"]).map((item) => ({
+    const payloadItems = await this.getPaginatedPayload(
+      env.JQUANTS_API_VERSION === "v2" ? "/equities/bars/daily" : "/prices/daily_quotes",
+      (url) => {
+        url.searchParams.set("code", normalized.providerCode);
+        url.searchParams.set("from", from.toISOString().slice(0, 10).replaceAll("-", ""));
+        url.searchParams.set("to", to.toISOString().slice(0, 10).replaceAll("-", ""));
+      },
+      ["data", "daily_quotes"],
+      "J-Quants daily quotes",
+      options
+    );
+    return payloadItems.map((item) => ({
       date: toStringValue(firstValue(item, ["Date", "D", "date"])),
       open: toNumber(firstValue(item, ["Open", "O", "open"])),
       high: toNumber(firstValue(item, ["High", "H", "high"])),
@@ -88,15 +91,16 @@ export class JQuantsProvider implements MarketDataProvider {
 
   async getFinancialStatements(code: string, options?: ProviderRequestOptions): Promise<FinancialStatement[]> {
     const normalized = await this.normalizeCode(code);
-    const url = this.apiUrl(env.JQUANTS_API_VERSION === "v2" ? "/fins/summary" : "/fins/statements");
-    url.searchParams.set("code", normalized.providerCode);
-    const response = await fetch(url, {
-      headers: await this.authHeaders(options),
-      signal: options?.signal
-    });
-    if (!response.ok) throw new Error(`J-Quants statements failed: ${response.status}`);
-    const payload = (await response.json()) as Record<string, unknown>;
-    return getArrayPayload(payload, ["data", "statements"]).map((item) => ({
+    const payloadItems = await this.getPaginatedPayload(
+      env.JQUANTS_API_VERSION === "v2" ? "/fins/summary" : "/fins/statements",
+      (url) => {
+        url.searchParams.set("code", normalized.providerCode);
+      },
+      ["data", "statements"],
+      "J-Quants statements",
+      options
+    );
+    return payloadItems.map((item) => ({
       periodType: toPeriodType(firstValue(item, ["TypeOfCurrentPeriod", "PeriodType", "periodType"])),
       periodEnd: toStringValue(firstValue(item, ["CurrentPeriodEndDate", "CurrentFiscalYearEndDate", "PeriodEnd", "FiscalYearEnd", "DisclosedDate"])),
       disclosedAt: toOptionalString(firstValue(item, ["DisclosedDate", "DisclosureDate"])),
@@ -136,6 +140,36 @@ export class JQuantsProvider implements MarketDataProvider {
   private apiUrl(path: string): URL {
     const base = env.JQUANTS_API_BASE_URL.endsWith("/") ? env.JQUANTS_API_BASE_URL : `${env.JQUANTS_API_BASE_URL}/`;
     return new URL(path.replace(/^\//, ""), base);
+  }
+
+  private async getPaginatedPayload(
+    path: string,
+    configureUrl: (url: URL) => void,
+    payloadKeys: string[],
+    errorLabel: string,
+    options?: ProviderRequestOptions
+  ): Promise<Array<Record<string, unknown>>> {
+    const items: Array<Record<string, unknown>> = [];
+    let paginationKey: string | null = null;
+    let pages = 0;
+    do {
+      pages += 1;
+      const url = this.apiUrl(path);
+      configureUrl(url);
+      if (paginationKey) url.searchParams.set("pagination_key", paginationKey);
+      const response = await fetch(url, {
+        headers: await this.authHeaders(options),
+        signal: options?.signal
+      });
+      if (!response.ok) throw new Error(`${errorLabel} failed: ${response.status}`);
+      const payload = (await response.json()) as Record<string, unknown>;
+      items.push(...getArrayPayload(payload, payloadKeys));
+      paginationKey = nextPaginationKey(payload);
+      if (pages >= 100 && paginationKey) {
+        throw new Error(`${errorLabel} pagination exceeded 100 pages.`);
+      }
+    } while (paginationKey);
+    return items;
   }
 
   private async authHeaders(options?: ProviderRequestOptions): Promise<Record<string, string>> {
@@ -196,6 +230,10 @@ function firstValue(item: Record<string, unknown>, keys: string[]): unknown {
     if (item[key] !== undefined) return item[key];
   }
   return undefined;
+}
+
+function nextPaginationKey(payload: Record<string, unknown>): string | null {
+  return toOptionalString(firstValue(payload, ["pagination_key", "paginationKey"]));
 }
 
 function toStringValue(value: unknown): string {

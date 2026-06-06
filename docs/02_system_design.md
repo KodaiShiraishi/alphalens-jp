@@ -234,6 +234,8 @@ interface MarketDataProvider {
 
 外部APIの生レスポンスはMVPではDBへ保存しません。DBには画面表示とAI入力に必要な正規化済みデータ、取得日時、provider名、リクエスト識別子、失敗ログのみ保存します。利用規約上の保存可否を確認できた場合だけ、生レスポンス保存を将来拡張として検討します。
 
+J-Quants APIのレスポンスに `pagination_key` が含まれる場合は、Provider層で後続ページを取得してから正規化します。API RouteやUIはページング有無を意識せず、検索結果、株価時系列、財務時系列を同じDTOとして扱います。
+
 実装候補:
 
 - `JQuantsProvider`: J-Quants APIを呼び出す

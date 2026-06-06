@@ -96,7 +96,7 @@ MVPでは次を実装しません。
 - ユーザーごとのデータは分離する。
 - 認証はNode.js / TypeScript APIが発行する不透明なセッショントークンをHttpOnly Cookieで保持する。
 - `POST`、`PUT`、`PATCH`、`DELETE` にはDouble Submit Cookie方式でCSRF対策を行う。
-- 公開デモでは登録APIのレート制限を行う。必要に応じて新規登録を停止し、デモユーザーを用意する。
+- 公開デモでは登録APIのレート制限を行う。必要に応じて `REGISTRATION_ENABLED=false` で新規登録を停止し、デモユーザーを用意する。
 
 ### 7.2 銘柄検索
 

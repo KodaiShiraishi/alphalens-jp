@@ -27,7 +27,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(rateLimit, {
     max: 120,
-    timeWindow: "1 minute"
+    timeWindow: "1 minute",
+    errorResponseBuilder: () => errors.rateLimited()
   });
 
   app.setErrorHandler((error, _request, reply) => {

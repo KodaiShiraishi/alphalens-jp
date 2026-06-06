@@ -11,6 +11,9 @@ const envSchema = z.object({
   DATABASE_PASSWORD: z.string().optional(),
   SESSION_SECRET: z.string().min(16).default("development-session-secret-change-me"),
   RUN_MIGRATIONS_ON_START: z.enum(["true", "false"]).default("false"),
+  REGISTRATION_ENABLED: z.enum(["true", "false"]).default("true"),
+  REGISTER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(10),
+  REGISTER_RATE_LIMIT_TIME_WINDOW: z.string().default("1 minute"),
   COOKIE_SECURE: z
     .enum(["true", "false"])
     .default(process.env.NODE_ENV === "production" ? "true" : "false"),
@@ -23,7 +26,7 @@ const envSchema = z.object({
   JQUANTS_EMAIL: z.string().optional(),
   JQUANTS_PASSWORD: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_MODEL: z.string().default("gpt-5-mini"),
   AI_PROVIDER: z.enum(["mock", "openai"]).default("mock"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000")
 });

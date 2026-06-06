@@ -30,7 +30,7 @@ MVPのAI機能はOpenAI APIで実装します。
 - 出力制御: Structured Outputs
 - 出力形式: JSON Schema
 - APIキー: `OPENAI_API_KEY`
-- モデル: `OPENAI_MODEL` 環境変数で指定する
+- モデル: `OPENAI_MODEL` 環境変数で指定する。MVPの既定値は、Responses APIとStructured Outputsに対応し、財務調査メモのような明確な構造化タスクに向く `gpt-5-mini` とする。
 
 モデルIDはOpenAI側で更新される可能性があるため、実装時点の公式ドキュメントを確認して決めます。MVPでは、コストと品質のバランスがよい小型モデルを第一候補にします。より高品質な分析が必要な場合は、同じResponses APIのまま上位モデルへ差し替えます。
 
