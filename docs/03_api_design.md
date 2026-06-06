@@ -406,28 +406,32 @@ Response:
     "stockCode": "7203",
     "title": "トヨタ自動車 ファンダメンタルズ調査メモ",
     "summary": "直近の財務データでは...",
-    "growth": "売上高は...",
-    "profitability": "営業利益率は...",
-    "stability": "自己資本比率は...",
-    "risks": [
-      "為替影響を受けやすい",
-      "原材料価格の変動リスクがある"
-    ],
-    "checkpoints": [
-      "次回決算で営業利益率の改善を確認する",
-      "地域別販売台数の推移を確認する"
-    ],
-    "dataLimitations": [
-      "キャッシュフロー情報はMVPの入力データに含まれていません。"
-    ],
-    "evidence": [
-      {
-        "label": "営業利益",
-        "period": "2026-03-31",
-        "value": 5000000000000,
-        "source": "J-Quants /fins/statements"
-      }
-    ],
+    "body": {
+      "summary": "直近の財務データでは...",
+      "growth": "売上高は...",
+      "profitability": "営業利益率は...",
+      "stability": "自己資本比率は...",
+      "risks": [
+        "為替影響を受けやすい",
+        "原材料価格の変動リスクがある"
+      ],
+      "checkpoints": [
+        "次回決算で営業利益率の改善を確認する",
+        "地域別販売台数の推移を確認する"
+      ],
+      "dataLimitations": [
+        "キャッシュフロー情報はMVPの入力データに含まれていません。"
+      ],
+      "evidence": [
+        {
+          "label": "営業利益",
+          "period": "2026-03-31",
+          "value": 5000000000000,
+          "source": "J-Quants /fins/statements"
+        }
+      ],
+      "disclaimer": "このレポートは投資助言ではありません。"
+    },
     "disclaimer": "このレポートは投資助言ではありません。",
     "inputDataVersion": "hash_...",
     "createdAt": "2026-06-06T12:00:00Z"

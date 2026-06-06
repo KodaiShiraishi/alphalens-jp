@@ -172,6 +172,7 @@ erDiagram
 ローカルで実行する主な検証:
 
 ```bash
+docker compose up -d postgres
 npm run lint
 npm run typecheck
 npm test
@@ -179,6 +180,8 @@ npm run build
 npm run db:migrate
 npm run db:seed
 ```
+
+`npm test` のAPI結合テストは、既定で `alphalens_test` DBを作成して使用します。誤操作防止のため、DB名に `test` を含まない `DATABASE_URL` では `ALLOW_NON_TEST_DATABASE=true` がない限り破壊的なTRUNCATEを実行しません。
 
 確認済みのスモーク導線:
 

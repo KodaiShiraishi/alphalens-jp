@@ -30,26 +30,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     timeWindow: "1 minute"
   });
 
-  app.addHook("preHandler", async (request) => {
-    const unsafe = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
-    if (!unsafe) return;
-    const csrfCookie = request.cookies.al_csrf;
-    const csrfHeader = request.headers["x-csrf-token"];
-    if (!csrfCookie || csrfCookie !== csrfHeader) {
-      throw errors.csrf();
-    }
-  });
-
-  const provider = createMarketDataProvider();
-  const marketService = new MarketService(provider);
-  const reportService = new ReportService(marketService);
-
-  await app.register(healthRoutes, { prefix: "/api" });
-  await app.register(authRoutes, { prefix: "/api" });
-  await app.register(stockRoutes(marketService), { prefix: "/api" });
-  await app.register(watchlistRoutes(marketService), { prefix: "/api" });
-  await app.register(reportRoutes(reportService), { prefix: "/api" });
-
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
       reply.status(400).send({
@@ -80,6 +60,26 @@ export async function buildApp(): Promise<FastifyInstance> {
       }
     });
   });
+
+  app.addHook("preHandler", async (request) => {
+    const unsafe = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
+    if (!unsafe) return;
+    const csrfCookie = request.cookies.al_csrf;
+    const csrfHeader = request.headers["x-csrf-token"];
+    if (!csrfCookie || csrfCookie !== csrfHeader) {
+      throw errors.csrf();
+    }
+  });
+
+  const provider = createMarketDataProvider();
+  const marketService = new MarketService(provider);
+  const reportService = new ReportService(marketService);
+
+  await app.register(healthRoutes, { prefix: "/api" });
+  await app.register(authRoutes, { prefix: "/api" });
+  await app.register(stockRoutes(marketService), { prefix: "/api" });
+  await app.register(watchlistRoutes(marketService), { prefix: "/api" });
+  await app.register(reportRoutes(reportService), { prefix: "/api" });
 
   app.addHook("onSend", async (_request, reply) => {
     if (!secureCookies && env.NODE_ENV !== "production") {

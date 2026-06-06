@@ -10,8 +10,10 @@ import { requireUser } from "../services/authService.js";
 import type { MarketService } from "../services/marketService.js";
 import { errors } from "../utils/errors.js";
 
+const stockCodeSchema = z.string().regex(/^\d{4,5}$/, "stock code must be four or five digits");
+
 const addSchema = z.object({
-  code: z.string().min(4).max(10),
+  code: stockCodeSchema,
   note: z.string().max(1000).optional()
 });
 
@@ -74,9 +76,10 @@ export function watchlistRoutes(marketService: MarketService): FastifyPluginAsyn
 
     app.delete<{ Params: { code: string } }>("/watchlist/:code", async (request) => {
       const user = await requireUser(request.cookies[sessionCookieName]);
+      const detail = await marketService.getDetail(stockCodeSchema.parse(request.params.code));
       await db
         .delete(watchlistItems)
-        .where(and(eq(watchlistItems.userId, user.id), eq(watchlistItems.stockCode, request.params.code)));
+        .where(and(eq(watchlistItems.userId, user.id), eq(watchlistItems.stockCode, detail.stock.code)));
       return { ok: true };
     });
   };

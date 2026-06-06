@@ -147,7 +147,10 @@ export class ReportService {
     limit = 20
   ): Promise<Array<{ id: string; stockCode: string; stockName: string; title: string; createdAt: string }>> {
     const filters = [eq(analysisReports.userId, userId)];
-    if (code) filters.push(eq(analysisReports.stockCode, code));
+    if (code) {
+      const detail = await this.marketService.getDetail(code);
+      filters.push(eq(analysisReports.stockCode, detail.stock.code));
+    }
     const rows = await db
       .select({
         id: analysisReports.id,

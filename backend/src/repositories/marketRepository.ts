@@ -124,13 +124,13 @@ export async function listDailyPrices(stockCode: string, from?: string, to?: str
     .orderBy(dailyPrices.date);
   return rows.map((row) => ({
     date: row.date,
-    open: row.open,
-    high: row.high,
-    low: row.low,
-    close: row.close,
-    adjustedClose: row.adjustedClose,
-    volume: row.volume,
-    turnoverValue: row.turnoverValue
+    open: toNullableNumber(row.open),
+    high: toNullableNumber(row.high),
+    low: toNullableNumber(row.low),
+    close: toNullableNumber(row.close),
+    adjustedClose: toNullableNumber(row.adjustedClose),
+    volume: toNullableNumber(row.volume),
+    turnoverValue: toNullableNumber(row.turnoverValue)
   }));
 }
 
@@ -191,18 +191,18 @@ export async function listFinancialStatements(stockCode: string): Promise<Financ
     periodStart: row.periodStart,
     periodEnd: row.periodEnd,
     disclosedAt: row.disclosedAt,
-    netSales: row.netSales,
-    operatingProfit: row.operatingProfit,
-    ordinaryProfit: row.ordinaryProfit,
-    profit: row.profit,
-    eps: row.eps,
-    bps: row.bps,
-    equityRatio: row.equityRatio,
-    roe: row.roe,
-    totalAssets: row.totalAssets,
-    equity: row.equity,
-    operatingCashFlow: row.operatingCashFlow,
-    freeCashFlow: row.freeCashFlow
+    netSales: toNullableNumber(row.netSales),
+    operatingProfit: toNullableNumber(row.operatingProfit),
+    ordinaryProfit: toNullableNumber(row.ordinaryProfit),
+    profit: toNullableNumber(row.profit),
+    eps: toNullableNumber(row.eps),
+    bps: toNullableNumber(row.bps),
+    equityRatio: toNullableNumber(row.equityRatio),
+    roe: toNullableNumber(row.roe),
+    totalAssets: toNullableNumber(row.totalAssets),
+    equity: toNullableNumber(row.equity),
+    operatingCashFlow: toNullableNumber(row.operatingCashFlow),
+    freeCashFlow: toNullableNumber(row.freeCashFlow)
   }));
 }
 
@@ -216,13 +216,13 @@ export async function latestDailyPrice(stockCode: string): Promise<DailyPrice | 
   if (!row) return null;
   return {
     date: row.date,
-    open: row.open,
-    high: row.high,
-    low: row.low,
-    close: row.close,
-    adjustedClose: row.adjustedClose,
-    volume: row.volume,
-    turnoverValue: row.turnoverValue
+    open: toNullableNumber(row.open),
+    high: toNullableNumber(row.high),
+    low: toNullableNumber(row.low),
+    close: toNullableNumber(row.close),
+    adjustedClose: toNullableNumber(row.adjustedClose),
+    volume: toNullableNumber(row.volume),
+    turnoverValue: toNullableNumber(row.turnoverValue)
   };
 }
 
@@ -235,13 +235,13 @@ export async function latestDailyPrices(stockCode: string, limit = 2): Promise<D
     .limit(limit);
   return rows.map((row) => ({
     date: row.date,
-    open: row.open,
-    high: row.high,
-    low: row.low,
-    close: row.close,
-    adjustedClose: row.adjustedClose,
-    volume: row.volume,
-    turnoverValue: row.turnoverValue
+    open: toNullableNumber(row.open),
+    high: toNullableNumber(row.high),
+    low: toNullableNumber(row.low),
+    close: toNullableNumber(row.close),
+    adjustedClose: toNullableNumber(row.adjustedClose),
+    volume: toNullableNumber(row.volume),
+    turnoverValue: toNullableNumber(row.turnoverValue)
   }));
 }
 
@@ -258,18 +258,18 @@ export async function latestFinancialStatement(stockCode: string): Promise<Finan
     periodStart: row.periodStart,
     periodEnd: row.periodEnd,
     disclosedAt: row.disclosedAt,
-    netSales: row.netSales,
-    operatingProfit: row.operatingProfit,
-    ordinaryProfit: row.ordinaryProfit,
-    profit: row.profit,
-    eps: row.eps,
-    bps: row.bps,
-    equityRatio: row.equityRatio,
-    roe: row.roe,
-    totalAssets: row.totalAssets,
-    equity: row.equity,
-    operatingCashFlow: row.operatingCashFlow,
-    freeCashFlow: row.freeCashFlow
+    netSales: toNullableNumber(row.netSales),
+    operatingProfit: toNullableNumber(row.operatingProfit),
+    ordinaryProfit: toNullableNumber(row.ordinaryProfit),
+    profit: toNullableNumber(row.profit),
+    eps: toNullableNumber(row.eps),
+    bps: toNullableNumber(row.bps),
+    equityRatio: toNullableNumber(row.equityRatio),
+    roe: toNullableNumber(row.roe),
+    totalAssets: toNullableNumber(row.totalAssets),
+    equity: toNullableNumber(row.equity),
+    operatingCashFlow: toNullableNumber(row.operatingCashFlow),
+    freeCashFlow: toNullableNumber(row.freeCashFlow)
   };
 }
 
@@ -293,4 +293,10 @@ export async function logProviderFetch(input: {
   errorMessage?: string | null;
 }): Promise<void> {
   await db.insert(providerFetchLogs).values(input);
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return value;
+  return Number(value);
 }
