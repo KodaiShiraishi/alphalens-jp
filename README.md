@@ -59,11 +59,11 @@ MVPでは次を作りません。
 このプロジェクトで見せる技術要素は次です。
 
 - フロントエンド: Next.js、TypeScript、ダッシュボードUI、チャート、フォーム
-- バックエンド: Go API、外部API連携、認証、集計処理、データ同期処理
-- DB: PostgreSQL、財務時系列データ、分析履歴、Watchlist
+- バックエンド: Node.js / TypeScript API、Fastify、Drizzle ORM、外部API連携、認証、集計処理
+- DB: PostgreSQL、drizzle-kit migration、財務時系列データ、分析履歴、Watchlist
 - AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
-- AWS: ECS/Fargate、RDS、Secrets Manager、CloudWatch
-- 将来拡張: S3、SQS、EventBridge、Workerによる非同期処理
+- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch、AWS CDK
+- 将来拡張: S3 artifact/RAG保存、SQS、EventBridge、Workerによる非同期処理
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 
 面接では「株価を当てるアプリ」ではなく、「企業調査の情報収集と分析を効率化するデータSaaS」と説明します。

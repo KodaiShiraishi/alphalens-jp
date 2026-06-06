@@ -32,8 +32,9 @@
 
 - Monorepo作成
 - Next.jsアプリ作成
-- Go API作成
+- Node.js / TypeScript API作成
 - PostgreSQL Docker Compose
+- Drizzle ORM / drizzle-kit設定
 - 基本README
 
 候補ディレクトリ:
@@ -51,8 +52,9 @@ alphalens-jp/
 完了条件:
 
 - フロントエンドが起動する。
-- Go APIのhealth checkが動く。
+- Node.js / TypeScript APIのhealth checkが動く。
 - PostgreSQLに接続できる。
+- Drizzle migrationを適用できる。
 
 <a id="phase-1"></a>
 ## 3. Phase 1: MVPコア
@@ -110,6 +112,8 @@ alphalens-jp/
 実装内容:
 
 - Dockerfile作成
+- AWS CDK v2
+- S3 + CloudFront
 - RDS PostgreSQL
 - ECS Fargate
 - ALB
@@ -171,8 +175,9 @@ READMEに書くべき内容:
 | 優先度 | タスク | 内容 |
 | --- | --- | --- |
 | P0 | リポジトリ作成 | frontend/backend/infra/docsを作る |
-| P0 | DB接続 | PostgreSQLとマイグレーションを用意 |
+| P0 | DB接続 | PostgreSQL、Drizzle ORM、drizzle-kit migrationを用意 |
 | P0 | Health Check | `/api/health` を実装 |
+| P0 | CSRF基盤 | `/api/auth/csrf` とDouble Submit Cookieを実装 |
 | P0 | Mock Provider | 実APIなしで開発できるようにする |
 | P0 | 銘柄検索 | 検索APIと画面 |
 | P0 | 銘柄詳細 | 財務・株価を表示 |
@@ -181,7 +186,7 @@ READMEに書くべき内容:
 | P1 | Watchlist | 追加、削除、一覧 |
 | P1 | AIレポート | 生成、保存、履歴 |
 | P1 | APIテスト | 主要APIの結合テスト |
-| P2 | AWSデプロイ | ECS/RDS/Secrets/CloudWatch |
+| P2 | AWSデプロイ | CDKでS3/CloudFront/ALB/ECS/RDS/Secrets/CloudWatch |
 | P2 | CI/CD | GitHub Actions |
 | P2 | README整備 | 採用向け説明を強化 |
 | P3 | EDINET連携 | 有報データ拡張 |

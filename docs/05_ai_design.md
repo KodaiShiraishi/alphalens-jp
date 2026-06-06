@@ -112,7 +112,7 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
     {
       "label": "string",
       "period": "string",
-      "value": "string",
+      "value": "number | string",
       "source": "string"
     }
   ],
@@ -187,7 +187,7 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
 
 ただし、企業資料の引用や一般文脈で誤検知する可能性があるため、MVPでは単純なブロックではなく、警告ログと再生成を優先します。
 
-OpenAIの応答が安全上の拒否、スキーマ不一致、不完全出力になった場合は、レポートを保存せず `AI_PROVIDER_ERROR` として扱います。拒否理由やエラー詳細は `analysis_jobs.safety_flags` またはログに保存しますが、ユーザーに内部プロンプトやAPIキーを表示しません。
+OpenAIの応答が安全上の拒否、スキーマ不一致、不完全出力になった場合は、レポートを保存せず `AI_PROVIDER_ERROR` として扱います。拒否理由やエラー詳細は構造化ログに保存しますが、ユーザーに内部プロンプトやAPIキーを表示しません。
 
 ### 7.3 UI上の免責
 

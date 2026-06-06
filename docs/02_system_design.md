@@ -15,9 +15,11 @@
 <a id="overview"></a>
 ## 1. システム概要
 
-AlphaLens JPは、Next.jsフロントエンド、Goバックエンド、PostgreSQL、AWS基盤で構成するWebアプリケーションです。
+AlphaLens JPは、Next.jsフロントエンド、Node.js / TypeScriptバックエンド、PostgreSQL、AWS基盤で構成するWebアプリケーションです。
 
 外部データソースから日本株データを取得し、DBにキャッシュします。ユーザーはブラウザから銘柄を検索し、財務・株価・AI分析を確認します。
+
+TypeScript学習とバックエンド設計の見せ方を優先するため、MVPのAPIはNext.js API Routesに寄せず、`backend/` 配下の独立したNode.js / TypeScript APIとして実装します。APIフレームワークはFastify、DBアクセスはDrizzle ORM、マイグレーションはdrizzle-kitを採用します。
 
 <a id="architecture"></a>
 ## 2. 全体アーキテクチャ
@@ -27,21 +29,21 @@ AlphaLens JPは、Next.jsフロントエンド、Goバックエンド、PostgreS
 ```mermaid
 flowchart LR
   User["User Browser"] --> FE["Next.js Frontend"]
-  FE --> API["Go REST API"]
+  FE --> API["Node.js / TypeScript REST API"]
   API --> DB["PostgreSQL"]
   API --> JQ["J-Quants API"]
   API --> OpenAI["OpenAI Responses API"]
   API --> CW["CloudWatch Logs"]
 ```
 
-MVPでは、J-Quants取得、OpenAIレポート生成、DB保存をGo API内のサービス層で実行します。非同期Worker、SQS、WebSocket通知はMVPでは必須にしません。
+MVPでは、J-Quants取得、OpenAIレポート生成、DB保存をNode.js / TypeScript API内のサービス層で同期的に実行します。非同期Worker、SQS、WebSocket通知はMVPでは実装しません。
 
 ### 2.2 将来構成
 
 ```mermaid
 flowchart LR
   User["User Browser"] --> FE["Next.js Frontend"]
-  FE --> API["Go REST API"]
+  FE --> API["Node.js / TypeScript REST API"]
   API --> DB["PostgreSQL"]
   API --> Queue["SQS / Job Queue"]
   Queue --> Worker["Data & AI Worker"]
@@ -53,7 +55,7 @@ flowchart LR
   Worker --> CW
 ```
 
-将来構成では、データ更新、AIレポート生成、リトライ処理をWorkerへ切り出します。MVP段階でも、サービス層はWorkerへ移せる粒度で分離します。
+将来構成では、データ更新、AIレポート生成、リトライ処理をWorkerへ切り出します。MVP段階では同期APIとして実装しますが、Provider層、AI入力作成、レポート保存処理はWorkerへ移せる粒度で分離します。
 
 <a id="components"></a>
 ## 3. コンポーネント構成
@@ -61,8 +63,8 @@ flowchart LR
 | コンポーネント | 技術 | 責務 |
 | --- | --- | --- |
 | Frontend | Next.js / TypeScript | 画面、フォーム、チャート、API呼び出し |
-| Backend API | Go | REST API、認証、DBアクセス、外部API連携制御 |
-| Worker | Go | 将来拡張。データ同期、AIレポート生成、再試行 |
+| Backend API | Node.js / TypeScript、Fastify、Drizzle ORM | REST API、認証、DBアクセス、外部API連携制御 |
+| Worker | Node.js / TypeScript | 将来拡張。データ同期、AIレポート生成、再試行 |
 | Database | PostgreSQL | ユーザー、銘柄、株価、財務、分析履歴を保存 |
 | Object Storage | S3 | 将来拡張。PDF、CSV、分析スナップショット保存 |
 | Queue | SQS | 将来拡張。非同期ジョブ管理 |
@@ -142,7 +144,7 @@ flowchart LR
 sequenceDiagram
   participant U as User
   participant FE as Frontend
-  participant API as Go API
+  participant API as Node.js API
   participant DB as PostgreSQL
 
   U->>FE: 銘柄検索
@@ -158,7 +160,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant FE as Frontend
-  participant API as Go API
+  participant API as Node.js API
   participant DB as PostgreSQL
   participant JQ as J-Quants
 
@@ -177,7 +179,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant FE as Frontend
-  participant API as Go API
+  participant API as Node.js API
   participant DB as PostgreSQL
   participant OpenAI as OpenAI Responses API
 
@@ -192,15 +194,16 @@ sequenceDiagram
 <a id="auth"></a>
 ## 6. 認証・認可
 
-MVPでは、Go APIでメール/パスワード認証を実装し、HttpOnly Cookieで不透明なセッショントークンを発行します。
+MVPでは、Node.js / TypeScript APIでメール/パスワード認証を実装し、HttpOnly Cookieで不透明なセッショントークンを発行します。
 
 認証方針:
 
 - セッション実体は `sessions` テーブルで管理する。
-- CookieにはDB保存済みトークンの生値を入れ、DBにはハッシュのみ保存する。
-- Cookieは `HttpOnly`、`Secure`、`SameSite=Lax` 以上を設定する。
-- 本番ではフロントエンドとAPIを同一site配下に置く。別site構成にする場合はCookie設定とCORSを再設計する。
-- 状態変更APIはCSRFトークンまたはDouble Submit Cookieで保護する。
+- セッションCookie名は本番では `__Host-al_session`、ローカルHTTP開発では `al_session` とし、DB保存済みトークンの生値を入れる。DBにはハッシュのみ保存する。
+- 本番のセッションCookieは `HttpOnly`、`Secure`、`SameSite=Lax`、`Path=/` を設定し、`Domain` は指定しない。ローカルHTTP開発では `al_session` に限り `Secure` を無効化する。
+- 本番ではCloudFrontの同一ドメイン配下にフロントエンドと `/api/*` を配置する。Vercelなど別site構成はMVPでは採用しない。
+- 状態変更APIはDouble Submit Cookie方式で保護する。APIはJavaScriptから読める `al_csrf` Cookieを発行し、フロントエンドは同じ値を `X-CSRF-Token` ヘッダーで送る。
+- ログイン、登録、ログアウトを含む状態変更APIはCSRFトークンを必須とする。
 
 認可方針:
 
@@ -213,17 +216,23 @@ MVPでは、Go APIでメール/パスワード認証を実装し、HttpOnly Cook
 
 外部APIは次のインターフェースで抽象化します。
 
-```go
-type MarketDataProvider interface {
-    NormalizeCode(ctx context.Context, input string) (*StockCode, error)
-    SearchStocks(ctx context.Context, query StockSearchQuery) ([]Stock, error)
-    GetStockProfile(ctx context.Context, code string) (*StockProfile, error)
-    GetDailyPrices(ctx context.Context, code string, from time.Time, to time.Time) ([]DailyPrice, error)
-    GetFinancialStatements(ctx context.Context, code string) ([]FinancialStatement, error)
+```ts
+type ProviderRequestOptions = {
+  signal?: AbortSignal;
+};
+
+interface MarketDataProvider {
+  normalizeCode(input: string, options?: ProviderRequestOptions): Promise<StockCode>;
+  searchStocks(query: StockSearchQuery, options?: ProviderRequestOptions): Promise<Stock[]>;
+  getStockProfile(code: string, options?: ProviderRequestOptions): Promise<StockProfile | null>;
+  getDailyPrices(code: string, from: Date, to: Date, options?: ProviderRequestOptions): Promise<DailyPrice[]>;
+  getFinancialStatements(code: string, options?: ProviderRequestOptions): Promise<FinancialStatement[]>;
 }
 ```
 
 `StockCode` は、ユーザー向けの `display_code` と外部API向けの `provider_code` を持ちます。J-Quantsでは4桁入力と5桁コードが混在しうるため、API境界で正規化します。
+
+外部APIの生レスポンスはMVPではDBへ保存しません。DBには画面表示とAI入力に必要な正規化済みデータ、取得日時、provider名、リクエスト識別子、失敗ログのみ保存します。利用規約上の保存可否を確認できた場合だけ、生レスポンス保存を将来拡張として検討します。
 
 実装候補:
 
