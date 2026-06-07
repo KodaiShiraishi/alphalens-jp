@@ -3,13 +3,14 @@
 ## 目次
 - [1. API概要](#overview)
 - [2. 共通仕様](#common)
-- [3. 認証API](#auth-api)
-- [4. 銘柄API](#stock-api)
-- [5. Watchlist API](#watchlist-api)
-- [6. AI分析レポートAPI](#analysis-api)
-- [7. データ同期API](#sync-api)
-- [8. エラー仕様](#errors)
-- [9. バリデーション](#validation)
+- [3. Health Check](#health-api)
+- [4. 認証API](#auth-api)
+- [5. 銘柄API](#stock-api)
+- [6. Watchlist API](#watchlist-api)
+- [7. AI分析レポートAPI](#analysis-api)
+- [8. データ同期API](#sync-api)
+- [9. エラー仕様](#errors)
+- [10. バリデーション](#validation)
 
 <a id="overview"></a>
 ## 1. API概要
@@ -42,9 +43,19 @@ application/json
 
 ### 2.2 認証
 
-認証が必要なAPIには、Go APIが発行するHttpOnly Cookieを使用します。Cookieには不透明なセッショントークンを入れ、DBにはトークンハッシュのみ保存します。
+認証が必要なAPIには、Node.js / TypeScript APIが発行するHttpOnly Cookieを使用します。Cookieには不透明なセッショントークンを入れ、DBにはトークンハッシュのみ保存します。
 
-状態変更APIではCSRF対策として `X-CSRF-Token` ヘッダーを要求します。ローカル開発ではNext.jsのプロキシまたは同一siteのAPI URLを使い、本番でもフロントエンドとAPIを同一site配下に置くことを前提にします。
+状態変更APIではCSRF対策としてDouble Submit Cookie方式を使います。APIは `al_csrf` Cookieを発行し、フロントエンドは同じ値を `X-CSRF-Token` ヘッダーで送ります。ログイン、登録、ログアウトを含む `POST`、`PUT`、`PATCH`、`DELETE` はCSRFトークン必須です。
+
+Cookie:
+
+| Cookie | 用途 | 属性 |
+| --- | --- | --- |
+| `__Host-al_session` | 本番セッション | HttpOnly、Secure、SameSite=Lax、Path=/、Domainなし |
+| `al_session` | ローカルHTTP開発用セッション | HttpOnly、SameSite=Lax、Path=/ |
+| `al_csrf` | CSRFトークン | Secure、SameSite=Lax、Path=/、HttpOnlyなし |
+
+本番ではCloudFrontの同一ドメインでフロントエンドと `/api/*` を配信します。ローカル開発ではNext.jsのプロキシで `/api/*` をバックエンドへ転送し、同一siteとして扱います。
 
 ### 2.3 日付形式
 
@@ -57,10 +68,47 @@ YYYY-MM-DD
 - 金額は原則として円単位の整数または小数で保持する。
 - パーセンテージは `0.1234` のような小数でAPI返却し、UIで `12.34%` 表示に変換する。
 
-<a id="auth-api"></a>
-## 3. 認証API
+<a id="health-api"></a>
+## 3. Health Check
 
-### 3.1 ユーザー登録
+### 3.1 API Health Check
+
+```http
+GET /api/health
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "db": "ok",
+  "version": "0.1.0"
+}
+```
+
+Health checkではDB接続のみ確認します。J-Quants APIやOpenAI APIなど外部サービスは呼び出しません。
+
+<a id="auth-api"></a>
+## 4. 認証API
+
+### 4.1 CSRFトークン取得
+
+```http
+GET /api/auth/csrf
+```
+
+Response:
+
+```json
+{
+  "csrfToken": "csrf_01H..."
+}
+```
+
+このAPIは未ログインでも呼び出せます。レスポンスと同時に `al_csrf` Cookieを設定します。
+
+### 4.2 ユーザー登録
 
 ```http
 POST /api/auth/register
@@ -86,7 +134,9 @@ Response:
 }
 ```
 
-### 3.2 ログイン
+登録成功時は本番では `__Host-al_session`、ローカルHTTP開発では `al_session` を設定し、新しい `al_csrf` Cookieも設定します。
+
+### 4.3 ログイン
 
 ```http
 POST /api/auth/login
@@ -112,7 +162,9 @@ Response:
 }
 ```
 
-### 3.3 ログアウト
+ログイン成功時は本番では `__Host-al_session`、ローカルHTTP開発では `al_session` を設定し、新しい `al_csrf` Cookieも設定します。
+
+### 4.4 ログアウト
 
 ```http
 POST /api/auth/logout
@@ -126,7 +178,9 @@ Response:
 }
 ```
 
-### 3.4 自分のユーザー情報
+ログアウト成功時はセッションCookieを削除し、`al_csrf` Cookieをローテーションします。
+
+### 4.5 自分のユーザー情報
 
 ```http
 GET /api/auth/me
@@ -144,9 +198,9 @@ Response:
 ```
 
 <a id="stock-api"></a>
-## 4. 銘柄API
+## 5. 銘柄API
 
-### 4.1 銘柄検索
+### 5.1 銘柄検索
 
 ```http
 GET /api/stocks?query=toyota&market=prime&sector=transportation&limit=20
@@ -172,7 +226,7 @@ Response:
 }
 ```
 
-### 4.2 銘柄詳細
+### 5.2 銘柄詳細
 
 ```http
 GET /api/stocks/{code}
@@ -205,13 +259,21 @@ Response:
     "profit": 3900000000000,
     "eps": 250.12,
     "bps": 2800.25,
-    "equityRatio": 0.38
+    "equityRatio": 0.38,
+    "derivedMetrics": {
+      "salesGrowth": 0.0478,
+      "operatingMargin": 0.1111,
+      "netMargin": 0.0867,
+      "roe": 0.1147,
+      "per": 12.08,
+      "pbr": 1.08
+    }
   },
   "dataUpdatedAt": "2026-06-06T12:00:00Z"
 }
 ```
 
-### 4.3 株価時系列
+### 5.3 株価時系列
 
 ```http
 GET /api/stocks/{code}/prices?from=2025-01-01&to=2026-06-06
@@ -235,7 +297,7 @@ Response:
 }
 ```
 
-### 4.4 財務時系列
+### 5.4 財務時系列
 
 ```http
 GET /api/stocks/{code}/financials
@@ -255,16 +317,24 @@ Response:
       "profit": 3900000000000,
       "eps": 250.12,
       "bps": 2800.25,
-      "equityRatio": 0.38
+      "equityRatio": 0.38,
+      "derivedMetrics": {
+        "salesGrowth": 0.0478,
+        "operatingMargin": 0.1111,
+        "netMargin": 0.0867,
+        "roe": 0.1147,
+        "per": 12.08,
+        "pbr": 1.08
+      }
     }
   ]
 }
 ```
 
 <a id="watchlist-api"></a>
-## 5. Watchlist API
+## 6. Watchlist API
 
-### 5.1 Watchlist取得
+### 6.1 Watchlist取得
 
 ```http
 GET /api/watchlist
@@ -279,6 +349,9 @@ Response:
       "code": "7203",
       "name": "トヨタ自動車",
       "latestPrice": 3021.5,
+      "previousClose": 3000.0,
+      "priceChange": 21.5,
+      "priceChangePct": 0.007166,
       "lastAnalyzedAt": "2026-06-06T12:00:00Z",
       "createdAt": "2026-06-06T10:00:00Z"
     }
@@ -286,7 +359,7 @@ Response:
 }
 ```
 
-### 5.2 Watchlist追加
+### 6.2 Watchlist追加
 
 ```http
 POST /api/watchlist
@@ -308,7 +381,7 @@ Response:
 }
 ```
 
-### 5.3 Watchlist削除
+### 6.3 Watchlist削除
 
 ```http
 DELETE /api/watchlist/{code}
@@ -323,9 +396,9 @@ Response:
 ```
 
 <a id="analysis-api"></a>
-## 6. AI分析レポートAPI
+## 7. AI分析レポートAPI
 
-### 6.1 AI分析レポート生成
+### 7.1 AI分析レポート生成
 
 ```http
 POST /api/stocks/{code}/analysis-reports
@@ -349,28 +422,32 @@ Response:
     "stockCode": "7203",
     "title": "トヨタ自動車 ファンダメンタルズ調査メモ",
     "summary": "直近の財務データでは...",
-    "growth": "売上高は...",
-    "profitability": "営業利益率は...",
-    "stability": "自己資本比率は...",
-    "risks": [
-      "為替影響を受けやすい",
-      "原材料価格の変動リスクがある"
-    ],
-    "checkpoints": [
-      "次回決算で営業利益率の改善を確認する",
-      "地域別販売台数の推移を確認する"
-    ],
-    "dataLimitations": [
-      "キャッシュフロー情報はMVPの入力データに含まれていません。"
-    ],
-    "evidence": [
-      {
-        "label": "営業利益",
-        "period": "2026-03-31",
-        "value": 5000000000000,
-        "source": "J-Quants /fins/statements"
-      }
-    ],
+    "body": {
+      "summary": "直近の財務データでは...",
+      "growth": "売上高は...",
+      "profitability": "営業利益率は...",
+      "stability": "自己資本比率は...",
+      "risks": [
+        "為替影響を受けやすい",
+        "原材料価格の変動リスクがある"
+      ],
+      "checkpoints": [
+        "次回決算で営業利益率の改善を確認する",
+        "地域別販売台数の推移を確認する"
+      ],
+      "dataLimitations": [
+        "キャッシュフロー情報はMVPの入力データに含まれていません。"
+      ],
+      "evidence": [
+        {
+          "label": "営業利益",
+          "period": "2026-03-31",
+          "value": 5000000000000,
+          "source": "J-Quants /fins/statements"
+        }
+      ],
+      "disclaimer": "このレポートは投資助言ではありません。"
+    },
     "disclaimer": "このレポートは投資助言ではありません。",
     "inputDataVersion": "hash_...",
     "createdAt": "2026-06-06T12:00:00Z"
@@ -378,7 +455,9 @@ Response:
 }
 ```
 
-### 6.2 分析履歴取得
+MVPでは同期生成として扱います。同一 `inputDataVersion` のレポートが存在し、`forceRefresh=false` の場合は既存レポートを返します。`language` は `inputDataVersion` の計算対象に含め、日本語レポートと英語レポートを別々に再利用します。新規生成がタイムアウト、拒否応答、スキーマ不一致、禁止表現チェック失敗になった場合はレポートを保存せず `AI_PROVIDER_ERROR` を返します。
+
+### 7.2 分析履歴取得
 
 ```http
 GET /api/analysis-reports?code=7203&limit=20
@@ -400,7 +479,7 @@ Response:
 }
 ```
 
-### 6.3 分析レポート詳細
+### 7.3 分析レポート詳細
 
 ```http
 GET /api/analysis-reports/{id}
@@ -424,8 +503,20 @@ Response:
       "evidence": []
     },
     "sourceSnapshot": {
-      "stockDataUpdatedAt": "2026-06-06T10:00:00Z",
-      "financialPeriods": ["2024-03-31", "2025-03-31", "2026-03-31"]
+      "language": "ja",
+      "source": "jquants",
+      "stock": {
+        "providerUpdatedAt": "2026-06-06T10:00:00Z"
+      },
+      "priceSummary": {
+        "latestDate": "2026-06-05",
+        "latestClose": 3021.5,
+        "oneMonthChangePct": 0.034,
+        "threeMonthChangePct": -0.012,
+        "volumeTrend": "increasing"
+      },
+      "financialPeriods": ["2024-03-31", "2025-03-31", "2026-03-31"],
+      "missingData": []
     },
     "createdAt": "2026-06-06T12:00:00Z"
   }
@@ -433,17 +524,17 @@ Response:
 ```
 
 <a id="sync-api"></a>
-## 7. データ同期API
+## 8. データ同期API
 
-MVPでは管理者APIとして公開しません。バックエンド内部処理またはCLIで実行します。SQS/Workerを導入した後に、必要であれば管理者専用APIとして公開します。
+MVPでは管理者APIとして公開しません。バックエンド内部処理またはCLIで実行します。以下のHTTP APIはSQS/Worker導入後の将来拡張案であり、MVP実装対象外です。
 
-### 7.1 銘柄データ更新
+### 8.1 銘柄データ更新
 
 ```http
 POST /api/internal/sync/stocks
 ```
 
-### 7.2 個別銘柄データ更新
+### 8.2 個別銘柄データ更新
 
 ```http
 POST /api/internal/sync/stocks/{code}
@@ -459,7 +550,7 @@ Response:
 ```
 
 <a id="errors"></a>
-## 8. エラー仕様
+## 9. エラー仕様
 
 エラーレスポンス:
 
@@ -478,8 +569,11 @@ Response:
 | 400 | VALIDATION_ERROR | 入力値不正 |
 | 401 | UNAUTHORIZED | 未ログイン |
 | 403 | FORBIDDEN | 権限なし |
+| 403 | CSRF_TOKEN_INVALID | CSRFトークンなし、または不一致 |
+| 403 | REGISTRATION_DISABLED | 公開デモなどで新規登録が停止されている |
 | 404 | STOCK_NOT_FOUND | 銘柄なし |
 | 404 | REPORT_NOT_FOUND | レポートなし |
+| 409 | USER_ALREADY_EXISTS | 登録済みメールアドレス |
 | 409 | WATCHLIST_ALREADY_EXISTS | Watchlist登録済み |
 | 429 | RATE_LIMITED | レート制限 |
 | 502 | MARKET_DATA_PROVIDER_ERROR | 外部データ取得失敗 |
@@ -487,7 +581,7 @@ Response:
 | 500 | INTERNAL_ERROR | サーバー内部エラー |
 
 <a id="validation"></a>
-## 9. バリデーション
+## 10. バリデーション
 
 | 項目 | ルール |
 | --- | --- |
@@ -495,6 +589,6 @@ Response:
 | password | 8文字以上 |
 | stock code | 4桁入力またはJ-Quantsの5桁コードを許容し、内部で `displayCode` と `providerCode` に正規化する |
 | query | 1文字以上、100文字以下 |
-| limit | 1以上100以下 |
+| limit | 銘柄検索は1以上50以下。分析履歴は1以上100以下 |
 | from/to | `YYYY-MM-DD`、from <= to |
 | language | `ja` または `en` |

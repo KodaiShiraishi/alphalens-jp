@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+      - "codex/**"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: alphalens_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d alphalens_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/alphalens_test
+          SESSION_SECRET: ci-session-secret-for-api-integration
+          COOKIE_SECURE: "false"
+          MARKET_DATA_PROVIDER: mock
+          AI_PROVIDER: mock
+      - run: npm run smoke:local
+        env:
+          ALPHALENS_SMOKE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/alphalens_smoke
+          SESSION_SECRET: ci-session-secret-for-local-smoke
+          COOKIE_SECURE: "false"
+          MARKET_DATA_PROVIDER: mock
+          AI_PROVIDER: mock
+      - run: npm run build
+      - run: npm run synth

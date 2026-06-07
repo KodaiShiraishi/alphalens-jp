@@ -1,0 +1,11 @@
+node_modules
+backend/dist
+frontend/.next
+frontend/out
+infra/dist
+cdk.out
+.git
+.env
+.env.*
+*.log
+*.tsbuildinfo

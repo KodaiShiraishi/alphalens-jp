@@ -19,6 +19,8 @@ AI機能の目的は、日本株のファンダメンタルズ調査メモを短
 
 AIは、銘柄の財務データ、株価サマリ、企業基本情報をもとに、成長性、収益性、安全性、リスク、追加確認ポイントを整理します。
 
+MVPの既定出力言語は日本語です。APIで `language: "en"` が指定された場合は英語の調査メモを生成し、同一入力データでも日本語レポートとは別の `input_hash` として扱います。
+
 <a id="provider"></a>
 ## 2. 利用API
 
@@ -30,7 +32,7 @@ MVPのAI機能はOpenAI APIで実装します。
 - 出力制御: Structured Outputs
 - 出力形式: JSON Schema
 - APIキー: `OPENAI_API_KEY`
-- モデル: `OPENAI_MODEL` 環境変数で指定する
+- モデル: `OPENAI_MODEL` 環境変数で指定する。MVPの既定値は、Responses APIとStructured Outputsに対応し、財務調査メモのような明確な構造化タスクに向く `gpt-5-mini` とする。
 
 モデルIDはOpenAI側で更新される可能性があるため、実装時点の公式ドキュメントを確認して決めます。MVPでは、コストと品質のバランスがよい小型モデルを第一候補にします。より高品質な分析が必要な場合は、同じResponses APIのまま上位モデルへ差し替えます。
 
@@ -91,6 +93,7 @@ AIに渡す入力は、バックエンドで構造化します。
   "missingData": [
     "cash_flow"
   ],
+  "language": "ja",
   "disclaimerPolicy": "Do not provide investment advice, target price, buy/sell recommendation, or guaranteed return."
 }
 ```
@@ -112,7 +115,7 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
     {
       "label": "string",
       "period": "string",
-      "value": "string",
+      "value": "number | string",
       "source": "string"
     }
   ],
@@ -187,7 +190,7 @@ OpenAI Responses APIのStructured Outputsを使い、JSON Schemaに沿ったJSON
 
 ただし、企業資料の引用や一般文脈で誤検知する可能性があるため、MVPでは単純なブロックではなく、警告ログと再生成を優先します。
 
-OpenAIの応答が安全上の拒否、スキーマ不一致、不完全出力になった場合は、レポートを保存せず `AI_PROVIDER_ERROR` として扱います。拒否理由やエラー詳細は `analysis_jobs.safety_flags` またはログに保存しますが、ユーザーに内部プロンプトやAPIキーを表示しません。
+OpenAIの応答が安全上の拒否、スキーマ不一致、不完全出力になった場合は、レポートを保存せず `AI_PROVIDER_ERROR` として扱います。拒否理由やエラー詳細は構造化ログに保存しますが、ユーザーに内部プロンプトやAPIキーを表示しません。
 
 ### 7.3 UI上の免責
 

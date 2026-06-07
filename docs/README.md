@@ -13,7 +13,7 @@
 
 AlphaLens JPは、日本株の財務データ・株価データ・企業情報を統合し、AIがファンダメンタルズ調査レポートを生成するSaaSです。
 
-目的は「投資助言」ではなく、企業調査に必要な情報収集・整理・比較を効率化することです。ユーザーは銘柄を検索し、財務指標・株価推移・AI分析レポート・Watchlistを通じて、調査メモを継続的に管理できます。
+目的は「投資助言」ではなく、企業調査に必要な情報収集・整理・比較を効率化することです。ユーザーは銘柄を検索し、財務指標・株価推移・AI分析レポート・Watchlist・分析履歴を通じて、調査メモを継続的に管理できます。
 
 <a id="documents"></a>
 ## 2. ドキュメント構成
@@ -59,11 +59,11 @@ MVPでは次を作りません。
 このプロジェクトで見せる技術要素は次です。
 
 - フロントエンド: Next.js、TypeScript、ダッシュボードUI、チャート、フォーム
-- バックエンド: Go API、外部API連携、認証、集計処理、データ同期処理
-- DB: PostgreSQL、財務時系列データ、分析履歴、Watchlist
+- バックエンド: Node.js / TypeScript API、Fastify、Drizzle ORM、外部API連携、認証、集計処理
+- DB: PostgreSQL、drizzle-kit migration、財務時系列データ、分析履歴、Watchlist
 - AI: OpenAI Responses API、Structured Outputs、根拠データ付きレポート生成、プロンプト設計、出力検証
-- AWS: ECS/Fargate、RDS、Secrets Manager、CloudWatch
-- 将来拡張: S3、SQS、EventBridge、Workerによる非同期処理
+- AWS: S3 + CloudFront、ECS/Fargate、ALB、RDS、Secrets Manager、CloudWatch Logs/Alarms、AWS CDK
+- 将来拡張: S3 artifact/RAG保存、SQS、EventBridge、Workerによる非同期処理
 - 運用: GitHub Actions、IaC、ログ、メトリクス、エラー監視
 
 面接では「株価を当てるアプリ」ではなく、「企業調査の情報収集と分析を効率化するデータSaaS」と説明します。
@@ -85,7 +85,7 @@ Codexが実装に入るときは、次の順で読んでください。
 
 実装判断で迷った場合は、MVP範囲を優先してください。投資助言、株価予測、自動売買につながる機能はMVPに入れません。
 
-外部APIの仕様は変更される可能性があるため、実装前にJ-Quants APIの現行仕様を確認してください。J-Quants APIはV2移行が進んでいるため、V1前提で実装しないでください。
+外部APIの仕様は変更される可能性があるため、実装前にJ-Quants APIの現行仕様を確認してください。J-Quants APIはV2移行が進んでいるため、実装はV2/APIキー方式を既定にし、V1は明示的な互換モードとして扱います。
 
 <a id="sources"></a>
 ## 6. 参照データソース

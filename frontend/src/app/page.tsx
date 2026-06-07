@@ -1,0 +1,660 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  ensureCsrf,
+  mutate,
+  request,
+  resetCsrf,
+  type AnalysisReport,
+  type AnalysisReportSummary,
+  type FinancialStatement,
+  type PricePoint,
+  type StockDetail,
+  type StockItem,
+  type User,
+  type WatchlistItem
+} from "../lib/api";
+
+export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("demo@example.com");
+  const [password, setPassword] = useState("password123");
+  const [query, setQuery] = useState("7203");
+  const [marketFilter, setMarketFilter] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("");
+  const [status, setStatus] = useState("");
+  const [stocks, setStocks] = useState<StockItem[]>([]);
+  const [detail, setDetail] = useState<StockDetail | null>(null);
+  const [prices, setPrices] = useState<PricePoint[]>([]);
+  const [financials, setFinancials] = useState<FinancialStatement[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [reports, setReports] = useState<AnalysisReportSummary[]>([]);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void initialize();
+  }, []);
+
+  async function initialize() {
+    try {
+      await ensureCsrf();
+      const me = await request<{ user: User | null }>("/api/auth/me");
+      setUser(me.user);
+      await search("7203");
+      if (me.user) {
+        await loadWatchlist();
+        await loadReports();
+      }
+    } catch (error) {
+      setStatus(messageOf(error));
+    }
+  }
+
+  async function auth(mode: "register" | "login") {
+    setBusy(true);
+    setStatus("");
+    try {
+      await ensureCsrf();
+      const data = await mutate<{ user: User }>(`/api/auth/${mode}`, {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      resetCsrf();
+      await ensureCsrf();
+      setUser(data.user);
+      await Promise.all([loadWatchlist(), loadReports()]);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    setBusy(true);
+    try {
+      await mutate<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+      resetCsrf();
+      setUser(null);
+      setWatchlist([]);
+      setReports([]);
+      setReport(null);
+      await ensureCsrf();
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function search(value = query, market = marketFilter, sector = sectorFilter) {
+    setBusy(true);
+    setStatus("");
+    try {
+      const params = new URLSearchParams({ query: value, limit: "20" });
+      if (market) params.set("market", market);
+      if (sector) params.set("sector", sector);
+      const data = await request<{ items: StockItem[]; total: number }>(`/api/stocks?${params.toString()}`);
+      setStocks(data.items);
+      if (data.items[0]) await selectStock(data.items[0].code);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectStock(code: string) {
+    setBusy(true);
+    setStatus("");
+    try {
+      const [detailData, priceData, financialData] = await Promise.all([
+        request<StockDetail>(`/api/stocks/${code}`),
+        request<{ items: PricePoint[] }>(`/api/stocks/${code}/prices`),
+        request<{ items: FinancialStatement[] }>(`/api/stocks/${code}/financials`)
+      ]);
+      setDetail(detailData);
+      setPrices(priceData.items);
+      setFinancials(financialData.items);
+      setReport(null);
+      if (user) await loadReports(code);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addWatchlist() {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      await mutate<{ ok: boolean }>("/api/watchlist", {
+        method: "POST",
+        body: JSON.stringify({ code: detail.stock.code })
+      });
+      await loadWatchlist();
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeWatchlist(code: string) {
+    setBusy(true);
+    setStatus("");
+    try {
+      await mutate<{ ok: boolean }>(`/api/watchlist/${code}`, { method: "DELETE" });
+      await loadWatchlist();
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadWatchlist() {
+    const data = await request<{ items: WatchlistItem[] }>("/api/watchlist");
+    setWatchlist(data.items);
+  }
+
+  async function loadReports(code?: string) {
+    const path = code ? `/api/analysis-reports?code=${encodeURIComponent(code)}&limit=20` : "/api/analysis-reports?limit=20";
+    const data = await request<{ items: AnalysisReportSummary[] }>(path);
+    setReports(data.items);
+  }
+
+  async function openReport(id: string) {
+    setBusy(true);
+    setStatus("");
+    try {
+      const data = await request<{ report: AnalysisReport }>(`/api/analysis-reports/${id}`);
+      setReport(data.report);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateReport() {
+    if (!detail) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const data = await mutate<{ report: AnalysisReport }>(
+        `/api/stocks/${detail.stock.code}/analysis-reports`,
+        {
+          method: "POST",
+          body: JSON.stringify({ language: "ja", forceRefresh: false })
+        }
+      );
+      setReport(data.report);
+      await Promise.all([loadReports(detail.stock.code), loadWatchlist()]);
+    } catch (error) {
+      setStatus(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const latestFinancials = detail?.latestFinancials;
+  const derivedMetrics = latestFinancials?.derivedMetrics;
+  const metricItems = useMemo(
+    () => [
+      ["株価", yen(detail?.latestPrice?.close)],
+      ["売上高", bigYen(latestFinancials?.netSales)],
+      ["営業利益", bigYen(latestFinancials?.operatingProfit)],
+      ["自己資本比率", percent(latestFinancials?.equityRatio)],
+      ["売上成長率", signedPercent(derivedMetrics?.salesGrowth)],
+      ["営業利益率", percent(derivedMetrics?.operatingMargin)],
+      ["PER", multiple(derivedMetrics?.per)],
+      ["PBR", multiple(derivedMetrics?.pbr)]
+    ],
+    [detail, derivedMetrics, latestFinancials]
+  );
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-title">AlphaLens JP</span>
+          <span className="brand-subtitle">日本株リサーチとAI調査メモ</span>
+        </div>
+        <div className="actions">
+          {user ? (
+            <>
+              <span className="muted">{user.email}</span>
+              <button className="button secondary" onClick={logout} disabled={busy}>
+                ログアウト
+              </button>
+            </>
+          ) : (
+            <span className="muted">未ログイン</span>
+          )}
+        </div>
+      </header>
+      <StatusBanner busy={busy} status={status} />
+
+      <div className="main-grid">
+        <aside className="stack">
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">認証</h2>
+            </div>
+            <div className="panel-body form-grid">
+              <div className="field">
+                <label htmlFor="email">メール</label>
+                <input id="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="password">パスワード</label>
+                <input
+                  id="password"
+                  className="input"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </div>
+              <div className="actions">
+                <button className="button" onClick={() => auth("login")} disabled={busy}>
+                  ログイン
+                </button>
+                <button className="button secondary" onClick={() => auth("register")} disabled={busy}>
+                  登録
+                </button>
+              </div>
+              <div className="status-line">{status}</div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">銘柄検索</h2>
+            </div>
+            <div className="panel-body stack">
+              <div className="field">
+                <label htmlFor="query">コード・企業名</label>
+                <input id="query" className="input" value={query} onChange={(event) => setQuery(event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="market">市場</label>
+                <select
+                  id="market"
+                  className="input"
+                  value={marketFilter}
+                  onChange={(event) => setMarketFilter(event.target.value)}
+                >
+                  <option value="">すべて</option>
+                  <option value="Prime">Prime</option>
+                  <option value="Standard">Standard</option>
+                  <option value="Growth">Growth</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="sector">業種</label>
+                <input
+                  id="sector"
+                  className="input"
+                  value={sectorFilter}
+                  onChange={(event) => setSectorFilter(event.target.value)}
+                />
+              </div>
+              <button className="button" onClick={() => search()} disabled={busy}>
+                検索
+              </button>
+              <div className="results">
+                {stocks.length === 0 ? (
+                  <div className="empty">検索結果なし</div>
+                ) : (
+                  stocks.map((stock) => (
+                    <button className="result-row" key={stock.code} onClick={() => selectStock(stock.code)}>
+                      <span className="code">{stock.displayCode}</span>
+                      <span>
+                        <strong>{stock.name}</strong>
+                        <br />
+                        <span className="muted">{stock.market ?? "-"} / {stock.sector33 ?? "-"}</span>
+                      </span>
+                      <span>{yen(stock.lastPrice)}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Watchlist</h2>
+              <button className="button secondary" onClick={addWatchlist} disabled={!user || !detail || busy}>
+                追加
+              </button>
+            </div>
+            <div className="panel-body results">
+              {watchlist.length === 0 ? (
+                <div className="empty">ログイン後に銘柄を保存できます。</div>
+              ) : (
+                watchlist.map((item) => (
+                  <div className="watchlist-item" key={item.code}>
+                    <button className="watchlist-main" onClick={() => selectStock(item.code)}>
+                      <span className="code">{item.code}</span>
+                      <span>
+                        <strong>{item.name}</strong>
+                        <br />
+                        <span className="muted">最終分析 {dateTime(item.lastAnalyzedAt)}</span>
+                      </span>
+                      <span>
+                        {yen(item.latestPrice)}
+                        <br />
+                        <span className={item.priceChange !== null && item.priceChange < 0 ? "negative" : "positive"}>
+                          {signedYen(item.priceChange)} / {signedPercent(item.priceChangePct)}
+                        </span>
+                      </span>
+                    </button>
+                    <button className="row-action danger" onClick={() => removeWatchlist(item.code)} disabled={busy}>
+                      削除
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">分析履歴</h2>
+            </div>
+            <div className="panel-body results">
+              {!user ? (
+                <div className="empty">ログイン後に分析履歴を確認できます。</div>
+              ) : reports.length === 0 ? (
+                <div className="empty">保存済みレポートはまだありません。</div>
+              ) : (
+                reports.map((item) => (
+                  <button className="result-row history-row" key={item.id} onClick={() => openReport(item.id)}>
+                    <span className="code">{item.stockCode}</span>
+                    <span>
+                      <strong>{item.stockName}</strong>
+                      <br />
+                      <span className="muted">{item.title}</span>
+                    </span>
+                    <span>{dateTime(item.createdAt)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+        </aside>
+
+        <section className="dashboard">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h1 className="panel-title">{detail ? detail.stock.name : "銘柄詳細"}</h1>
+                <div className="muted">
+                  {detail
+                    ? `${detail.stock.displayCode} / ${detail.stock.market ?? "-"} / ${detail.stock.sector33 ?? "-"} / ${sourceLabel(detail.stock.provider)} / 更新 ${dateTime(detail.dataUpdatedAt)}`
+                    : "検索結果から銘柄を選択"}
+                </div>
+              </div>
+              <button className="button" onClick={generateReport} disabled={!user || !detail || busy}>
+                AIレポート生成
+              </button>
+            </div>
+            <div className="panel-body stack">
+              <div className="metric-grid">
+                {metricItems.map(([label, value]) => (
+                  <div className="metric" key={label}>
+                    <div className="metric-label">{label}</div>
+                    <div className="metric-value">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="chart">
+                <PriceChart prices={prices} />
+              </div>
+              <FinancialHistory financials={financials} />
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">AI分析レポート</h2>
+              {report ? <span className="muted">{new Date(report.createdAt).toLocaleString("ja-JP")}</span> : null}
+            </div>
+            <div className="panel-body">
+              {!report ? (
+                <div className="empty">ログイン後に選択銘柄のAIレポートを生成できます。</div>
+              ) : (
+                <div className="stack">
+                  <p>{report.summary}</p>
+                  <ReportSourceMeta report={report} />
+                  <div className="report-grid">
+                    <ReportSection title="成長性" text={report.body.growth} />
+                    <ReportSection title="収益性" text={report.body.profitability} />
+                    <ReportSection title="安全性" text={report.body.stability} />
+                    <ReportList title="確認ポイント" items={report.body.checkpoints} />
+                    <ReportList title="リスク" items={report.body.risks} />
+                    <ReportList title="データ制約" items={report.body.dataLimitations} />
+                    <EvidenceList items={report.body.evidence} />
+                  </div>
+                  <p className="disclaimer">
+                    {report.body.disclaimer} 最終的な投資判断はご自身で行ってください。
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export function StatusBanner({ busy, status }: { busy: boolean; status: string }) {
+  if (!busy && !status) return null;
+  return (
+    <div className={status ? "status-banner status-banner-error" : "status-banner"} role={status ? "alert" : "status"}>
+      {status || "処理中..."}
+    </div>
+  );
+}
+
+export function PriceChart({ prices }: { prices: PricePoint[] }) {
+  if (prices.length === 0) {
+    return <div className="empty">株価データなし</div>;
+  }
+  const closes = prices.map((price) => price.close ?? 0).filter((value) => value > 0);
+  if (closes.length === 0) {
+    return <div className="empty">終値データなし</div>;
+  }
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const width = 800;
+  const height = 230;
+  const points = prices
+    .map((price, index) => {
+      const x = (index / Math.max(1, prices.length - 1)) * (width - 40) + 20;
+      const close = price.close ?? min;
+      const y = height - 30 - ((close - min) / Math.max(1, max - min)) * (height - 60);
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="株価チャート">
+      <line x1="20" y1="200" x2="780" y2="200" stroke="#d7e0ea" />
+      <polyline fill="none" stroke="#126c74" strokeWidth="3" points={points} />
+      <text x="20" y="24" fill="#667385" fontSize="12">
+        {yen(max)}
+      </text>
+      <text x="20" y="216" fill="#667385" fontSize="12">
+        {yen(min)}
+      </text>
+    </svg>
+  );
+}
+
+function ReportSection({ title, text }: { title: string; text: string }) {
+  return (
+    <section className="report-section">
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </section>
+  );
+}
+
+function ReportList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="report-section">
+      <h3>{title}</h3>
+      <ul className="list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function FinancialHistory({ financials }: { financials: FinancialStatement[] }) {
+  const rows = [...financials]
+    .sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))
+    .slice(0, 3);
+  if (rows.length === 0) {
+    return <div className="empty">財務データなし</div>;
+  }
+
+  return (
+    <section className="financial-history">
+      <h2 className="subsection-title">財務履歴</h2>
+      <div className="table-scroll">
+        <table className="financial-table">
+          <thead>
+            <tr>
+              <th>期間</th>
+              <th>売上高</th>
+              <th>営業利益</th>
+              <th>経常利益</th>
+              <th>純利益</th>
+              <th>EPS</th>
+              <th>BPS</th>
+              <th>自己資本比率</th>
+              <th>売上成長率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((item) => (
+              <tr key={`${item.periodType}-${item.periodEnd}`}>
+                <td>{item.periodEnd}</td>
+                <td>{bigYen(item.netSales)}</td>
+                <td>{bigYen(item.operatingProfit)}</td>
+                <td>{bigYen(item.ordinaryProfit)}</td>
+                <td>{bigYen(item.profit)}</td>
+                <td>{yen(item.eps)}</td>
+                <td>{yen(item.bps)}</td>
+                <td>{percent(item.equityRatio)}</td>
+                <td>{signedPercent(item.derivedMetrics?.salesGrowth)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function ReportSourceMeta({ report }: { report: AnalysisReport }) {
+  const snapshot = report.sourceSnapshot;
+  const financialPeriods = snapshot?.financialPeriods?.slice(-3).join(", ") || "-";
+  return (
+    <div className="source-meta">
+      <span>利用データ</span>
+      <span>{sourceLabel(snapshot?.source)} / 更新 {dateTime(snapshot?.stock?.providerUpdatedAt)}</span>
+      <span>株価 {snapshot?.latestPrice?.date ?? "-"}</span>
+      <span>1か月 {signedPercent(snapshot?.priceSummary?.oneMonthChangePct)}</span>
+      <span>3か月 {signedPercent(snapshot?.priceSummary?.threeMonthChangePct)}</span>
+      <span>財務 {snapshot?.latestFinancials?.periodEnd ?? financialPeriods}</span>
+      <span>対象期間 {financialPeriods}</span>
+    </div>
+  );
+}
+
+function EvidenceList({ items }: { items: AnalysisReport["body"]["evidence"] }) {
+  return (
+    <section className="report-section report-section-wide">
+      <h3>根拠データ</h3>
+      {items.length === 0 ? (
+        <p className="muted">根拠データなし</p>
+      ) : (
+        <div className="evidence-list">
+          {items.map((item) => (
+            <div className="evidence-row" key={`${item.label}-${item.period}-${item.source}`}>
+              <span>{item.label}</span>
+              <span>{item.period}</span>
+              <strong>{typeof item.value === "number" ? bigYen(item.value) : item.value}</strong>
+              <span className="muted">{item.source}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function yen(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return `${Math.round(value).toLocaleString("ja-JP")}円`;
+}
+
+function signedYen(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${Math.round(value).toLocaleString("ja-JP")}円`;
+}
+
+function bigYen(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  if (Math.abs(value) >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(1)}兆円`;
+  if (Math.abs(value) >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}億円`;
+  return yen(value);
+}
+
+function percent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function signedPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${(value * 100).toFixed(2)}%`;
+}
+
+function multiple(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return `${value.toFixed(1)}倍`;
+}
+
+function dateTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function sourceLabel(provider: string | null | undefined): string {
+  if (provider === "jquants") return "J-Quants";
+  if (provider === "mock") return "Mock";
+  return "データソース不明";
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : "エラーが発生しました。";
+}
